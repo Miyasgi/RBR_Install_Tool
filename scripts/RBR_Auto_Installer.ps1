@@ -44,6 +44,13 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+$script:ScriptDir  = if ($PSScriptRoot) { $PSScriptRoot } else { $PWD.Path }
+$script:ProjectRoot = Split-Path -Parent $script:ScriptDir
+if (-not (Test-Path (Join-Path $script:ProjectRoot "assets"))) {
+    # Backward compatibility for legacy flat layout.
+    $script:ProjectRoot = $script:ScriptDir
+}
+
 $script:SingleInstanceMutex = $null
 try {
     $createdNew = $false
@@ -54,18 +61,30 @@ try {
     }
 } catch {}
 
-$script:ScriptDir  = if ($PSScriptRoot) { $PSScriptRoot } else { $PWD.Path }
-$script:ProjectRoot = Split-Path -Parent $script:ScriptDir
-if (-not (Test-Path (Join-Path $script:ProjectRoot "assets"))) {
-    # Backward compatibility for legacy flat layout.
-    $script:ProjectRoot = $script:ScriptDir
-}
-
 $defaultLogPath = Join-Path (Join-Path $script:ProjectRoot "logs") "RBR_Auto_Installer.log"
 $script:LogPath    = if ($LogPath) { $LogPath } else { $defaultLogPath }
 $script:StartTime  = Get-Date
 $script:RsfOfficialDownloadPage = "https://www.rallysimfans.hu/rbr/download.php?download=rsfrbr"
 $script:QbtLatestDownloadLink = "https://sourceforge.net/projects/qbittorrent/files/latest/download"
+
+$script:RunLockStream = $null
+$script:RunLockPath = Join-Path $script:ProjectRoot "RBR_Auto_Installer.lock"
+try {
+    $lockDir = Split-Path -Parent $script:RunLockPath
+    if ($lockDir -and -not (Test-Path $lockDir)) {
+        New-Item -Path $lockDir -ItemType Directory -Force | Out-Null
+    }
+
+    $script:RunLockStream = [System.IO.File]::Open($script:RunLockPath, [System.IO.FileMode]::OpenOrCreate, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+    $lockText = "PID=$PID; START=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($lockText)
+    $script:RunLockStream.SetLength(0)
+    $script:RunLockStream.Write($bytes, 0, $bytes.Length)
+    $script:RunLockStream.Flush()
+} catch {
+    Write-Host "[!] 检测到安装助手已在运行（文件锁占用），本次启动已取消。" -ForegroundColor Yellow
+    exit 2
+}
 
 try {
     $logDir = Split-Path -Parent $script:LogPath
@@ -423,12 +442,10 @@ function Wait-InstallerAndLaunch {
                 $fi = Get-Item -Path $existing -ErrorAction Stop
                 $preExisting[$existing] = @{
                     Length = [int64]$fi.Length
-                    LastWriteTicks = [int64]$fi.LastWriteTimeUtc.Ticks
                 }
             } catch {
                 $preExisting[$existing] = @{
                     Length = -1
-                    LastWriteTicks = 0
                 }
             }
         }
@@ -441,6 +458,11 @@ function Wait-InstallerAndLaunch {
     $lastHint = (Get-Date).AddSeconds(-60)
     $lastProbe = (Get-Date).AddSeconds(-30)
     $probeLogged = $false
+    $lastNotDoneHint = (Get-Date).AddSeconds(-120)
+    $stableCandidatePath = ""
+    $stableSize = -1
+    $stableCount = 0
+    $stableRequiredCount = 3   # with PollSec=20 => about 60s stable
 
     while ((Get-Date) -lt $deadline) {
         $installerPath = Find-InstallerFromPaths -SearchPaths $SearchPaths
@@ -451,8 +473,8 @@ function Wait-InstallerAndLaunch {
             try {
                 $cur = Get-Item -Path $installerPath -ErrorAction Stop
                 $curLen = [int64]$cur.Length
-                $curTicks = [int64]$cur.LastWriteTimeUtc.Ticks
-                if ($curLen -ne $oldFp.Length -or $curTicks -ne $oldFp.LastWriteTicks) {
+                # 仅用文件大小变化判定“新下载/更新”，避免做种阶段修改时间戳导致误判。
+                if ($curLen -ne $oldFp.Length) {
                     $isUpdated = $true
                 }
             } catch {}
@@ -463,33 +485,59 @@ function Wait-InstallerAndLaunch {
                 Write-OK "检测到安装器文件已更新：$installerPath"
             }
         }
-        if ($installerPath) {
-            Write-OK "检测到安装器：$installerPath"
-            Write-Host ""
-            Write-Host "  ┌─── 安装前必读 ───────────────────────────────────┐" -ForegroundColor Yellow
-            Write-Host "  │  1. 弹出窗口后请选择 [Full Installation]         │" -ForegroundColor Yellow
-            Write-Host "  │  2. 不建议安装到 C 盘，推荐 E:\\RBR             │" -ForegroundColor Yellow
-            Write-Host "  │  3. 如杀毒软件拦截，请选择「允许/信任」          │" -ForegroundColor Yellow
-            Write-Host "  │  4. 不要把游戏装在 Program Files 或桌面！        │" -ForegroundColor Yellow
-            Write-Host "  └──────────────────────────────────────────────────┘" -ForegroundColor Yellow
-            Write-Host ""
-            Start-Process $installerPath
-            Write-OK "已自动启动安装器"
-            return $true
-        }
-
-        # 非 API 模式兜底：若后续 WebUI 可用且 torrent 已完成，则直接启动预设安装器
-        if ($PreferredInstaller -and (Test-Path $PreferredInstaller) -and (((Get-Date) - $lastProbe).TotalSeconds -ge 15)) {
+        # 非 API 模式严格约束：必须先确认 torrent 完成，再允许启动安装器
+        if (((Get-Date) - $lastProbe).TotalSeconds -ge 15) {
             $lastProbe = Get-Date
             if (Test-QbtTorrentCompletedFallback) {
                 if (-not $probeLogged) {
                     Write-Log -Level "INFO" -Message "Fallback probe matched: torrent completed by qB WebUI state."
                     $probeLogged = $true
                 }
-                Write-OK "检测到 torrent 已完成（fallback API），即将启动安装器"
-                Start-Process -FilePath $PreferredInstaller
-                Write-OK "已自动启动安装器"
-                return $true
+                $launchPath = if ($installerPath) { $installerPath } elseif ($PreferredInstaller -and (Test-Path $PreferredInstaller)) { $PreferredInstaller } else { $null }
+                if ($launchPath) {
+                    Write-OK "检测到 torrent 已完成（fallback API），即将启动安装器"
+                    Write-Host ""
+                    Write-Host "  ┌─── 安装前必读 ───────────────────────────────────┐" -ForegroundColor Yellow
+                    Write-Host "  │  1. 弹出窗口后请选择 [Full Installation]         │" -ForegroundColor Yellow
+                    Write-Host "  │  2. 不建议安装到 C 盘，推荐 E:\\RBR             │" -ForegroundColor Yellow
+                    Write-Host "  │  3. 如杀毒软件拦截，请选择「允许/信任」          │" -ForegroundColor Yellow
+                    Write-Host "  │  4. 不要把游戏装在 Program Files 或桌面！        │" -ForegroundColor Yellow
+                    Write-Host "  └──────────────────────────────────────────────────┘" -ForegroundColor Yellow
+                    Write-Host ""
+                    Start-Process -FilePath $launchPath
+                    Write-OK "已自动启动安装器"
+                    return $true
+                }
+            }
+        }
+
+        if ($installerPath) {
+            try {
+                $fi = Get-Item -Path $installerPath -ErrorAction Stop
+                $curSize = [int64]$fi.Length
+
+                if ($stableCandidatePath -ne $installerPath) {
+                    $stableCandidatePath = $installerPath
+                    $stableSize = $curSize
+                    $stableCount = 1
+                } elseif ($curSize -eq $stableSize) {
+                    $stableCount += 1
+                } else {
+                    $stableSize = $curSize
+                    $stableCount = 1
+                }
+
+                if ($stableCount -ge $stableRequiredCount -and $curSize -gt 0) {
+                    Write-Warn "WebUI 未能确认完成，已按文件稳定性判定下载完成，准备启动安装器。"
+                    Start-Process -FilePath $installerPath
+                    Write-OK "已自动启动安装器"
+                    return $true
+                }
+            } catch {}
+
+            if (((Get-Date) - $lastNotDoneHint).TotalSeconds -ge 60) {
+                Write-Warn "已发现安装器文件，但尚未确认 torrent 下载完成，暂不启动。"
+                $lastNotDoneHint = Get-Date
             }
         }
 
@@ -933,13 +981,8 @@ if (-not $qbtExe) {
     Write-Host "  直链（最新版）：$script:QbtLatestDownloadLink" -ForegroundColor Cyan
     Write-Host ""
     if ($GuiMode) {
-        Write-Log -Level "INFO" -Message "qBittorrent not found in GuiMode, opening download page automatically."
-        try {
-            Start-Process $script:QbtLatestDownloadLink
-            Write-OK "已自动打开 qBittorrent 下载页"
-        } catch {
-            Write-Warn "自动打开下载页失败，请手动访问：$script:QbtLatestDownloadLink"
-        }
+        # GuiMode 下由 UI 弹出 Yes/No 决定是否打开下载页，后端不再自动跳转。
+        Write-Log -Level "INFO" -Message "qBittorrent not found in GuiMode; waiting for UI user confirmation to open download page."
     } else {
         $answer = Read-UserInput -Prompt "  是否现在打开下载页？(Y/N)" -Default "N"
         if ($answer -match '^[Yy]') {
@@ -1069,20 +1112,24 @@ if (-not $useQbtApi) {
     if ($preferredInstaller) {
         Write-Log -Level "INFO" -Message "Preferred installer detected: $preferredInstaller"
         Write-Host "  提示：当前是非 API 模式，脚本无法自动读取 qBittorrent 的做种状态。" -ForegroundColor DarkYellow
-        Write-Host "  当你在 qBittorrent 看到状态变成 Seeding/做种 后，可回到这里直接启动安装器。" -ForegroundColor DarkYellow
+        Write-Host "  现在采用严格模式：仅在确认 torrent 完成后才会自动启动安装器。" -ForegroundColor DarkYellow
         $manualLaunch = Read-UserInput -Prompt "  已看到 Seeding/做种？输入 Y 立即启动安装器（直接回车=继续自动等待）" -Default ""
         if ($manualLaunch -match '^[Yy]') {
-            try {
-                Start-Process -FilePath $preferredInstaller -ErrorAction Stop
-                Write-OK "已启动安装器：$preferredInstaller"
-                Write-Host ""
-                Write-OK "安装助手任务完成！祝游戏顺利！"
-                Write-Host ""
-                Pause-IfConsole "按 Enter 退出"
-                exit 0
-            } catch {
-                Write-Fail "启动安装器失败：$_"
-                Write-Log -Level "FAIL" -Message "Manual launch failed: $_"
+            if (Test-QbtTorrentCompletedFallback) {
+                try {
+                    Start-Process -FilePath $preferredInstaller -ErrorAction Stop
+                    Write-OK "已启动安装器：$preferredInstaller"
+                    Write-Host ""
+                    Write-OK "安装助手任务完成！祝游戏顺利！"
+                    Write-Host ""
+                    Pause-IfConsole "按 Enter 退出"
+                    exit 0
+                } catch {
+                    Write-Fail "启动安装器失败：$_"
+                    Write-Log -Level "FAIL" -Message "Manual launch failed: $_"
+                }
+            } else {
+                Write-Warn "尚未确认 torrent 完成，已阻止提前启动安装器。"
             }
         }
     } else {
@@ -1092,21 +1139,9 @@ if (-not $useQbtApi) {
     $installerSearchPaths = Get-InstallerSearchPaths -PrimaryPath $DownloadPath -TorrentPath $TorrentFile
     $launched = Wait-InstallerAndLaunch -SearchPaths $installerSearchPaths -PreferredInstaller $preferredInstaller -PollSec 20 -MaxMinutes 720
     if (-not $launched) {
-        if ($preferredInstaller -and (Test-Path $preferredInstaller)) {
-            Write-Warn "未在下载目录中找到安装器，尝试启动预设安装器..."
-            try {
-                Start-Process -FilePath $preferredInstaller -ErrorAction Stop
-                Write-OK "已启动安装器：$preferredInstaller"
-            } catch {
-                Write-Fail "启动预设安装器失败：$_"
-                Write-Warn "将打开下载目录，请手动运行安装器 EXE"
-                Start-Process "explorer.exe" -ArgumentList $DownloadPath
-            }
-        } else {
-            Write-Warn "未自动找到安装器 EXE，正在打开下载目录..."
-            Write-Host "  请手动运行目录中的 Rallysimfans_Installer_*.exe" -ForegroundColor Yellow
-            Start-Process "explorer.exe" -ArgumentList $DownloadPath
-        }
+        Write-Warn "未确认 torrent 完整下载，已阻止自动启动安装器。"
+        Write-Warn "请先在 qBittorrent 中确认该任务已完成（100% / Seeding），再手动运行安装器。"
+        Start-Process "explorer.exe" -ArgumentList $DownloadPath
     }
 
     Write-Host ""
@@ -1235,6 +1270,9 @@ Write-Host ""
 Pause-IfConsole "按 Enter 退出"
 
 try {
+    if ($script:RunLockStream) {
+        $script:RunLockStream.Dispose()
+    }
     if ($script:SingleInstanceMutex) {
         $script:SingleInstanceMutex.ReleaseMutex() | Out-Null
         $script:SingleInstanceMutex.Dispose()

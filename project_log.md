@@ -239,3 +239,122 @@ Adjustment:
 
 - Existing analyzer warnings in scripts/RBR_Auto_Installer.ps1 (e.g., `matches`/`args` automatic variable naming, unapproved verb naming) are historical and non-blocking for runtime.
 - If needed later, clean these warnings in a separate maintenance pass to reduce noise.
+
+## 13) Correction Update (2026-04-30, later)
+
+### 13.1 Strict installer launch gating (backend)
+
+Problem:
+- Installer EXE could launch too early in non-API path (before torrent completion was confirmed).
+
+Change:
+- scripts/RBR_Auto_Installer.ps1 now enforces strict rule:
+  - Only launch installer after confirmed torrent completion (fallback API confirmation).
+  - If installer file is found but torrent completion is not confirmed, do NOT launch.
+  - Removed non-API fallback that attempted to launch preferred installer without confirmed completion.
+
+Outcome:
+- qB detection/config issues no longer allow early installer popup.
+
+### 13.2 qB download consent behavior aligned
+
+Problem:
+- In GuiMode, backend auto-open could conflict with UI interaction expectations.
+
+Change:
+- scripts/RBR_Auto_Installer.ps1 in GuiMode no longer auto-opens qB download page.
+- Browser opening is now user-driven from UI only.
+
+Outcome:
+- No automatic jump to qB page without user action.
+
+### 13.3 False "exit code 1" status mitigation in monitor
+
+Problem:
+- Monitor could show failure while backend was still running/logging (process handle/re-elevation tracking mismatch).
+
+Change in scripts/RBR_UI_Launcher.ps1:
+- Added Start-BackendProcess helper:
+  - If already admin: start without Verb RunAs.
+  - If not admin: start with Verb RunAs.
+- Continue button now blocks duplicate relaunch when current process is still running.
+- Exit handling now checks recent log activity; if logs are still updating, monitor keeps running instead of immediately showing failure.
+
+Outcome:
+- Reduced false negative failure state on top status label.
+
+### 13.4 qB download UX changed from popup to explicit button
+
+Problem:
+- Repeated download prompts could trigger multiple qB downloads.
+
+Change in scripts/RBR_UI_Launcher.ps1:
+- Removed automatic Yes/No qB download popup.
+- Added explicit button: "下载 qB 最新版".
+- Button is enabled only when qB missing is detected; user must click manually to open latest download link.
+
+Outcome:
+- No repeated auto prompts; no accidental multiple downloads from prompt spam.
+
+## 14) End-of-Day Debug Snapshot (2026-04-30)
+
+### 14.1 Repeated WARN issue still observed in some runs
+
+Observed symptom:
+- Log repeatedly shows: `已发现安装器文件，但尚未确认 torrent 下载完成，暂不启动。`
+- User also observed qB task already at `100% / Seeding`, but installer EXE still not launched.
+
+Important evidence from logs/screenshots:
+- During some runs, same warning appears many times across the same attempt.
+- Earlier logs also showed duplicated lines like repeated `检测到安装器文件已更新` and repeated `仍在等待下载完成...`, which strongly suggests concurrent or overlapping backend instances writing to the same log.
+- In one reproduced case, backend spent ~60s in WebUI startup phase, then fell back to non-API mode and entered wait loop.
+
+### 14.2 Root-cause hypotheses narrowed down
+
+Likely causes identified:
+1. Duplicate backend instances / overlapping runs.
+  - This can corrupt monitor interpretation and produce repeated WARN cadence.
+2. Non-API completion confirmation too strict / unreliable.
+  - WebUI timeout pushes flow into non-API mode.
+  - Completion then relies on fallback heuristics around installer file presence/stability.
+3. `Rallysimfans_Installer.exe` may already exist in target folder and continue changing in ways that never satisfy the fallback completion gate.
+
+### 14.3 Fixes already applied today
+
+Backend changes in scripts/RBR_Auto_Installer.ps1:
+- Added strict rule: installer must not auto-launch before confirmed completion.
+- Added file-size-based stability fallback (removed timestamp dependence) to reduce false "not finished" state during Seeding/checking.
+- Added exclusive lock file: `RBR_Auto_Installer.lock`
+  - Intended behavior: if lock is already held, new backend instance exits with code `2`.
+
+UI changes in scripts/RBR_UI_Launcher.ps1:
+- Added `Start-BackendProcess` helper.
+- Improved handling for false non-zero exit while logs still update.
+- Added special message for exit code `2` (already running).
+- Added UI-side lock check before continue/start logic to prevent duplicate launch.
+
+### 14.4 Current state before stopping
+
+What is done:
+- Code for UI-side lock detection was added.
+- That last UI-side duplicate-start prevention change was edited successfully.
+
+What was NOT completed before session end:
+- Final rebuild after the most recent UI-side lock check was NOT completed because tool execution was cancelled.
+- Therefore current source tree includes the latest UI lock-check code, but EXE may not yet contain that very last change unless rebuilt next session.
+
+### 14.5 First actions for next session
+
+1. Rebuild EXE immediately:
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\Build_LauncherExe.ps1`
+2. Test with exactly one fresh launch of root EXE.
+3. If repeated WARN still occurs after rebuild:
+  - inspect whether `RBR_Auto_Installer.lock` is working as intended;
+  - inspect whether installer file size is actually stable while qB shows Seeding;
+  - consider adding an explicit fallback rule: if qB UI visually reaches `100% / Seeding` and installer file exists, allow immediate launch in non-API mode.
+
+### 14.6 Practical note for tomorrow
+
+- Start from source, not from assumption.
+- First confirm whether duplicate backend instances still happen after the new lock checks.
+- If duplicate runs are eliminated and issue remains, focus only on the non-API completion heuristic in `Wait-InstallerAndLaunch`.

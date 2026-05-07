@@ -34,6 +34,46 @@ if (-not (Test-Path $autoScript)) {
     exit 1
 }
 
+function Test-IsAdministrator {
+    try {
+        $id = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+        $principal = New-Object System.Security.Principal.WindowsPrincipal($id)
+        return $principal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
+    } catch {
+        return $false
+    }
+}
+
+function Test-BackendRunLockInUse {
+    $lockPath = Join-Path $projectRoot "RBR_Auto_Installer.lock"
+    try {
+        $dir = Split-Path -Parent $lockPath
+        if ($dir -and -not (Test-Path $dir)) {
+            New-Item -Path $dir -ItemType Directory -Force | Out-Null
+        }
+
+        $fs = [System.IO.File]::Open($lockPath, [System.IO.FileMode]::OpenOrCreate, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+        $fs.Dispose()
+        return $false
+    } catch {
+        return $true
+    }
+}
+
+function Start-BackendProcess {
+    param([string]$Arguments)
+
+    if (Test-BackendRunLockInUse) {
+        throw "检测到后台任务已在运行，请等待当前任务结束后再继续。"
+    }
+
+    if (Test-IsAdministrator) {
+        return Start-Process -FilePath "powershell.exe" -ArgumentList $Arguments -WindowStyle Hidden -PassThru
+    }
+
+    return Start-Process -FilePath "powershell.exe" -ArgumentList $Arguments -WindowStyle Hidden -Verb RunAs -PassThru
+}
+
 function Get-DefaultDownloadPath {
     # Most users keep game data on D: if available.
     try {
@@ -218,10 +258,27 @@ function Show-RunMonitor {
 
     $chkVerbose = New-Object System.Windows.Forms.CheckBox
     $chkVerbose.Text = "显示详细日志（高级）"
-    $chkVerbose.Location = New-Object System.Drawing.Point(20, 446)
+    $chkVerbose.Location = New-Object System.Drawing.Point(20, 476)
     $chkVerbose.Size = New-Object System.Drawing.Size(170, 24)
     $chkVerbose.Checked = $false
     $mForm.Controls.Add($chkVerbose)
+
+    $btnDownloadQbt = New-Object System.Windows.Forms.Button
+    $btnDownloadQbt.Text = "下载 qB 最新版"
+    $btnDownloadQbt.Location = New-Object System.Drawing.Point(20, 440)
+    $btnDownloadQbt.Size = New-Object System.Drawing.Size(210, 32)
+    $btnDownloadQbt.Enabled = $false
+    $btnDownloadQbt.Add_Click({
+        try {
+            Start-Process $qbtLatestDownloadUrl | Out-Null
+            $lbl.Text = '状态：已打开 qB 下载页，请安装后点击"我已安装 qB，继续"'
+            $btnDownloadQbt.Text = "已打开下载页"
+            $btnDownloadQbt.Enabled = $false
+        } catch {
+            [System.Windows.Forms.MessageBox]::Show("打开下载页失败，请手动访问：$qbtLatestDownloadUrl", "提示", "OK", "Warning") | Out-Null
+        }
+    })
+    $mForm.Controls.Add($btnDownloadQbt)
 
     $btnOpenLog = New-Object System.Windows.Forms.Button
     $btnOpenLog.Text = "打开日志"
@@ -234,7 +291,6 @@ function Show-RunMonitor {
 
     $manualLaunchChosen = $false
     $waitingForQbtInstall = $false
-    $qbtDownloadPromptShown = $false
     $currentProcess = $Process
     $timer = $null
 
@@ -275,18 +331,24 @@ function Show-RunMonitor {
             return
         }
 
+        if ((Test-BackendRunLockInUse) -or ($currentProcess -and -not $currentProcess.HasExited)) {
+            [System.Windows.Forms.MessageBox]::Show("当前任务仍在运行，请先等待。", "提示", "OK", "Information") | Out-Null
+            return
+        }
+
         try {
             # 清空旧日志，避免“继续”后被上一轮失败日志覆盖状态显示。
             if (Test-Path $LogPath) {
                 try { Clear-Content -Path $LogPath -ErrorAction SilentlyContinue } catch {}
             }
 
-            $newProc = Start-Process -FilePath "powershell.exe" -ArgumentList $RelaunchArguments -WindowStyle Hidden -Verb RunAs -PassThru
+            $newProc = Start-BackendProcess -Arguments $RelaunchArguments
             $currentProcess = $newProc
             $waitingForQbtInstall = $false
-            $qbtDownloadPromptShown = $false
             $manualLaunchChosen = $false
             $phase = "idle"
+            $btnDownloadQbt.Text = "下载 qB 最新版"
+            $btnDownloadQbt.Enabled = $false
             $btnContinueQbt.Enabled = $false
             $btnClose.Enabled = $false
             $btnLaunchNow.Enabled = $false
@@ -368,25 +430,9 @@ function Show-RunMonitor {
                                 $waitingForQbtInstall = $true
                                 $lbl.Text = '状态：未检测到 qB，请安装后点击"我已安装 qB，继续"'
                                 $btnContinueQbt.Enabled = -not [string]::IsNullOrWhiteSpace($RelaunchArguments)
+                                $btnDownloadQbt.Text = "下载 qB 最新版"
+                                $btnDownloadQbt.Enabled = $true
                                 $btnClose.Enabled = $true
-
-                                if (-not $qbtDownloadPromptShown) {
-                                    $qbtDownloadPromptShown = $true
-                                    $ask = [System.Windows.Forms.MessageBox]::Show(
-                                        "检测到未安装 qBittorrent。是否帮你下载最新版？`n`n点击 Yes 将打开官方下载（SourceForge Latest）。",
-                                        "需要安装 qBittorrent",
-                                        "YesNo",
-                                        "Question"
-                                    )
-                                    if ($ask -eq [System.Windows.Forms.DialogResult]::Yes) {
-                                        try {
-                                            Start-Process $qbtLatestDownloadUrl | Out-Null
-                                            $lbl.Text = '状态：已打开 qB 下载页，请安装后点击"我已安装 qB，继续"'
-                                        } catch {
-                                            [System.Windows.Forms.MessageBox]::Show("打开下载页失败，请手动访问：$qbtLatestDownloadUrl", "提示", "OK", "Warning") | Out-Null
-                                        }
-                                    }
-                                }
                             }
 
                             if ($l -match 'Preferred installer detected:\s*(.+)$') {
@@ -438,15 +484,39 @@ function Show-RunMonitor {
             }
 
             if ($currentProcess -and $currentProcess.HasExited) {
-                $timer.Stop()
                 if ($currentProcess.ExitCode -eq 0) {
+                    $timer.Stop()
                     $lbl.Text = "状态：流程结束（成功）"
                     $bar.Style = "Continuous"
                     $bar.Value = 100
                     $lblPct.Text = "100%"
+                } elseif ($currentProcess.ExitCode -eq 2) {
+                    $timer.Stop()
+                    $lbl.Text = "状态：检测到已有任务在运行，请不要重复启动"
+                    $btnContinueQbt.Enabled = $true
+                    $btnClose.Enabled = $true
                 } else {
+                    $logStillActive = $false
+                    try {
+                        if (Test-Path $LogPath) {
+                            $lastWrite = (Get-Item -Path $LogPath -ErrorAction SilentlyContinue).LastWriteTime
+                            if ($lastWrite -and (((Get-Date) - $lastWrite).TotalSeconds -le 8)) {
+                                $logStillActive = $true
+                            }
+                        }
+                    } catch {}
+
+                    if ($logStillActive) {
+                        $lbl.Text = "状态：后台仍在运行，等待进度更新..."
+                        $currentProcess = $null
+                        return
+                    }
+
+                    $timer.Stop()
                     if ($waitingForQbtInstall -and -not [string]::IsNullOrWhiteSpace($RelaunchArguments)) {
                         $lbl.Text = '状态：qB 尚未就绪，请安装后点击"我已安装 qB，继续"'
+                        $btnDownloadQbt.Text = "下载 qB 最新版"
+                        $btnDownloadQbt.Enabled = $true
                         $btnContinueQbt.Enabled = $true
                     } else {
                         $lbl.Text = "状态：流程结束（失败，退出码 $($currentProcess.ExitCode)）"
@@ -820,7 +890,7 @@ $btnStart.Add_Click({
             $candidate = Join-Path $download "Rallysimfans_Installer.exe"
             if (Test-Path $candidate) { $preferredInstallerForUi = $candidate }
         }
-        $proc = Start-Process -FilePath "powershell.exe" -ArgumentList $arguments -WindowStyle Hidden -Verb RunAs -PassThru
+        $proc = Start-BackendProcess -Arguments $arguments
         $form.Hide()
         Show-RunMonitor -Process $proc -LogPath $logPath -PreferredInstaller $preferredInstallerForUi -RelaunchArguments $arguments
         $form.Close()
