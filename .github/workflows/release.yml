@@ -1,0 +1,26 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Package release ZIP
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}"
+          $zipName = "RBR_Install_Tool_$version.zip"
+          $include = @("启动安装助手.bat", "README.md", "dist", "scripts", "assets")
+          Compress-Archive -Path $include -DestinationPath $zipName
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: RBR_Install_Tool_*.zip
+          generate_release_notes: true
