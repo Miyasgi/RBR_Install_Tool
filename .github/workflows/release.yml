@@ -18,7 +18,7 @@ jobs:
         run: |
           $version = "${{ github.ref_name }}"
           $zipName = "RBR_Install_Tool_$version.zip"
-          $include = @("启动安装助手.bat", "README.md", "dist", "scripts", "assets")
+          $include = @("启动安装助手.bat", "RBR_Install_Assistant.exe", "README.md", "scripts", "assets")
           Compress-Archive -Path $include -DestinationPath $zipName
 
       - name: Create GitHub Release
