@@ -19,15 +19,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set version
+        id: ver
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            echo "value=${{ github.event.inputs.version }}" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "value=${{ github.ref_name }}" >> $env:GITHUB_OUTPUT
+          }
+
       - name: Create tag (manual trigger only)
         if: github.event_name == 'workflow_dispatch'
         shell: pwsh
         run: |
-          $version = "${{ github.event.inputs.version }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag $version
-          git push origin $version
+          git tag ${{ steps.ver.outputs.value }}
+          git push origin ${{ steps.ver.outputs.value }}
 
       - name: Build launcher EXE
         shell: pwsh
@@ -36,14 +45,13 @@ jobs:
       - name: Package release ZIP
         shell: pwsh
         run: |
-          $version = if ("${{ github.event_name }}" -eq "workflow_dispatch") { "${{ github.event.inputs.version }}" } else { "${{ github.ref_name }}" }
-          $zipName = "RBR_Install_Tool_$version.zip"
+          $zipName = "RBR_Install_Tool_${{ steps.ver.outputs.value }}.zip"
           $include = @("启动安装助手.bat", "RBR_Install_Assistant.exe", "README.md", "scripts", "assets")
           Compress-Archive -Path $include -DestinationPath $zipName
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version || github.ref_name }}
+          tag_name: ${{ steps.ver.outputs.value }}
           files: RBR_Install_Tool_*.zip
           generate_release_notes: true
