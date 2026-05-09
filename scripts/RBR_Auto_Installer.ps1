@@ -69,22 +69,16 @@ $script:QbtLatestDownloadLink = "https://sourceforge.net/projects/qbittorrent/fi
 
 $script:TorrentAlreadyOpened = $false
 $script:RunLockStream = $null
-$script:RunLockPath = Join-Path $script:ProjectRoot "RBR_Auto_Installer.lock"
+$script:SingleInstanceMutex = $null
 try {
-    $lockDir = Split-Path -Parent $script:RunLockPath
-    if ($lockDir -and -not (Test-Path $lockDir)) {
-        New-Item -Path $lockDir -ItemType Directory -Force | Out-Null
+    $script:SingleInstanceMutex = New-Object System.Threading.Mutex($false, "Local\RBR_Auto_Installer")
+    if (-not $script:SingleInstanceMutex.WaitOne(0)) {
+        Write-Host "[!] 检测到安装助手已在运行，本次启动已取消。" -ForegroundColor Yellow
+        $script:SingleInstanceMutex.Dispose()
+        exit 2
     }
-
-    $script:RunLockStream = [System.IO.File]::Open($script:RunLockPath, [System.IO.FileMode]::OpenOrCreate, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
-    $lockText = "PID=$PID; START=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
-    $bytes = [System.Text.Encoding]::UTF8.GetBytes($lockText)
-    $script:RunLockStream.SetLength(0)
-    $script:RunLockStream.Write($bytes, 0, $bytes.Length)
-    $script:RunLockStream.Flush()
 } catch {
-    Write-Host "[!] 检测到安装助手已在运行（文件锁占用），本次启动已取消。" -ForegroundColor Yellow
-    exit 2
+    Write-Host "[!] 单实例检查失败，继续运行：$_" -ForegroundColor Yellow
 }
 
 try {
@@ -380,8 +374,17 @@ function Test-QbtWebUI {
     try {
         $resp = Invoke-WebRequest "http://${script:QbtHost}:${script:QbtPort}/api/v2/app/version" `
             -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop
-        return ($resp.StatusCode -eq 200)
-    } catch { return $false }
+        return ($resp.StatusCode -lt 500)
+    } catch {
+        # 401/403 = Web UI is running but requires auth — still counts as "up"
+        # Response can be null for connection refused — guard against that
+        $resp = $_.Exception.Response
+        if ($null -ne $resp) {
+            $code = $resp.StatusCode.value__
+            return ($code -eq 401 -or $code -eq 403)
+        }
+        return $false
+    }
 }
 
 function Open-TorrentInQBittorrent {

@@ -45,18 +45,13 @@ function Test-IsAdministrator {
 }
 
 function Test-BackendRunLockInUse {
-    $lockPath = Join-Path $projectRoot "RBR_Auto_Installer.lock"
     try {
-        $dir = Split-Path -Parent $lockPath
-        if ($dir -and -not (Test-Path $dir)) {
-            New-Item -Path $dir -ItemType Directory -Force | Out-Null
-        }
-
-        $fs = [System.IO.File]::Open($lockPath, [System.IO.FileMode]::OpenOrCreate, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
-        $fs.Dispose()
-        return $false
+        $m = New-Object System.Threading.Mutex($false, "Global\RBR_Auto_Installer")
+        $acquired = $m.WaitOne(0)
+        $m.Dispose()
+        return (-not $acquired)
     } catch {
-        return $true
+        return $false
     }
 }
 
@@ -291,6 +286,7 @@ function Show-RunMonitor {
 
     $manualLaunchChosen = $false
     $waitingForQbtInstall = $false
+    $seedingPopupShown = $false
     $currentProcess = $Process
     $timer = $null
 
@@ -473,7 +469,8 @@ function Show-RunMonitor {
                                 }
                             }
 
-                            if ($l -match '\[INFO\]\s*SEEDING_LAUNCH_READY=(.+)') {
+                            if ((-not $seedingPopupShown) -and ($l -match '\[INFO\]\s*SEEDING_LAUNCH_READY=(.+)')) {
+                                $seedingPopupShown = $true
                                 $launchPath = $matches[1].Trim()
                                 $bar.Value = 100
                                 $lblPct.Text = '100%'

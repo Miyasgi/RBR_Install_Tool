@@ -1,57 +1,61 @@
-﻿===== Run Start: 2026-05-08 20:26:14 =====
-[2026-05-08 20:26:14] [INFO] Log file path: E:\Project Repo\RBR_Install_Tool\logs\RBR_Auto_Installer.log
-[2026-05-08 20:26:14] [STEP] 步骤 1/7：定位 .torrent 文件
-[2026-05-08 20:26:14] [OK] 已指定安装器：E:\RBR\Rallysimfans_Installer.exe
-[2026-05-08 20:26:14] [INFO] User specified installer file: E:\RBR\Rallysimfans_Installer.exe
-[2026-05-08 20:26:14] [STEP] 步骤 2/7：确认下载路径
-[2026-05-08 20:26:14] [OK] 下载路径：E:\\RBR
-[2026-05-08 20:26:14] [STEP] 步骤 3/7：检查 qBittorrent
-[2026-05-08 20:26:14] [OK] qBittorrent：E:\QB\qBittorrent\qbittorrent.exe
-[2026-05-08 20:26:14] [INFO] Cached qBittorrent path: E:\QB\qBittorrent\qbittorrent.exe
-[2026-05-08 20:26:14] [STEP] 步骤 4/7：配置并启动 qBittorrent
-[2026-05-08 20:26:14] [STEP] 正在同步 qBittorrent 配置...
-[2026-05-08 20:26:14] [OK] qBittorrent 配置已更新（启用 Web UI，端口 8080，默认下载目录：E:\\RBR）
-[2026-05-08 20:26:14] [STEP] 步骤 5/7：连接 qBittorrent API
-[2026-05-08 20:26:14] [STEP] 启动 qBittorrent 并打开 torrent...
-[2026-05-08 20:26:14] [OK] 已调用 qBittorrent 打开 torrent（保存路径已预填：E:\\RBR）
-[2026-05-08 20:26:14] [PROGRESS] QBT_STARTUP=5
-[2026-05-08 20:26:18] [PROGRESS] QBT_STARTUP=8
-[2026-05-08 20:26:22] [PROGRESS] QBT_STARTUP=11
-[2026-05-08 20:26:26] [PROGRESS] QBT_STARTUP=14
-[2026-05-08 20:26:30] [PROGRESS] QBT_STARTUP=17
-[2026-05-08 20:26:34] [PROGRESS] QBT_STARTUP=20
-[2026-05-08 20:26:38] [PROGRESS] QBT_STARTUP=23
-[2026-05-08 20:26:42] [PROGRESS] QBT_STARTUP=26
-[2026-05-08 20:26:46] [PROGRESS] QBT_STARTUP=29
-[2026-05-08 20:26:50] [PROGRESS] QBT_STARTUP=32
-[2026-05-08 20:26:54] [PROGRESS] QBT_STARTUP=35
-[2026-05-08 20:26:58] [PROGRESS] QBT_STARTUP=38
-[2026-05-08 20:27:02] [PROGRESS] QBT_STARTUP=41
-[2026-05-08 20:27:06] [PROGRESS] QBT_STARTUP=44
-[2026-05-08 20:27:10] [PROGRESS] QBT_STARTUP=47
-[2026-05-08 20:27:14] [PROGRESS] QBT_STARTUP=50
-[2026-05-08 20:27:18] [PROGRESS] QBT_STARTUP=53
-[2026-05-08 20:27:22] [PROGRESS] QBT_STARTUP=56
-[2026-05-08 20:27:26] [PROGRESS] QBT_STARTUP=59
-[2026-05-08 20:27:30] [PROGRESS] QBT_STARTUP=62
-[2026-05-08 20:27:34] [PROGRESS] QBT_STARTUP=65
-[2026-05-08 20:27:38] [PROGRESS] QBT_STARTUP=68
-[2026-05-08 20:27:42] [PROGRESS] QBT_STARTUP=71
-[2026-05-08 20:27:46] [PROGRESS] QBT_STARTUP=74
-[2026-05-08 20:27:51] [PROGRESS] QBT_STARTUP=77
-[2026-05-08 20:27:55] [PROGRESS] QBT_STARTUP=80
-[2026-05-08 20:27:59] [PROGRESS] QBT_STARTUP=83
-[2026-05-08 20:28:03] [PROGRESS] QBT_STARTUP=86
-[2026-05-08 20:28:07] [PROGRESS] QBT_STARTUP=89
-[2026-05-08 20:28:11] [PROGRESS] QBT_STARTUP=92
-[2026-05-08 20:28:17] [WARN] qBittorrent Web UI 未响应，使用非 API 模式监控进度
-[2026-05-08 20:28:17] [STEP] 步骤 6/7：以非 API 模式打开 Torrent
-[2026-05-08 20:28:17] [WARN] 当前为非 API 模式：脚本无法自动读取下载进度。
-[2026-05-08 20:28:17] [INFO] Preferred installer detected: E:\RBR\Rallysimfans_Installer.exe
-[2026-05-08 20:28:17] [INFO] GuiMode input prompt skipped:   已看到 Seeding/做种？输入 Y 立即启动安装器（直接回车=继续自动等待） (default='')
-[2026-05-08 20:28:17] [STEP] 等待安装器文件出现并自动启动
-[2026-05-08 20:28:17] [INFO] Installer search paths: E:\RBR; E:\Project Repo\RBR_Install_Tool; E:\Project Repo\RBR_Install_Tool\scripts; C:\Windows\system32
-[2026-05-08 20:28:18] [WARN] 检测到目录中已存在安装器文件，等待新下载的版本出现：E:\RBR\Rallysimfans_Installer.exe
-[2026-05-08 20:28:20] [WARN] 已发现安装器文件，但尚未确认 torrent 下载完成，暂不启动。
-[2026-05-08 20:28:20] [INFO] Installer candidate detected in wait loop: E:\RBR\Rallysimfans_Installer.exe
-[2026-05-08 20:28:20] [STEP] 仍在等待下载完成...
+﻿===== Run Start: 2026-05-09 09:23:56 =====
+[2026-05-09 09:23:56] [INFO] Log file path: E:\Project Repo\RBR_Install_Tool\logs\RBR_Auto_Installer.log
+[2026-05-09 09:23:56] [STEP] 步骤 1/7：定位 .torrent 文件
+[2026-05-09 09:23:56] [OK] 已指定安装器：E:\RBR\Rallysimfans_Installer.exe
+[2026-05-09 09:23:56] [INFO] User specified installer file: E:\RBR\Rallysimfans_Installer.exe
+[2026-05-09 09:23:56] [STEP] 步骤 2/7：确认下载路径
+[2026-05-09 09:23:56] [OK] 下载路径：E:\\RBR
+[2026-05-09 09:23:56] [STEP] 步骤 3/7：检查 qBittorrent
+[2026-05-09 09:23:56] [OK] qBittorrent：E:\QB\qBittorrent\qbittorrent.exe
+[2026-05-09 09:23:56] [INFO] Cached qBittorrent path: E:\QB\qBittorrent\qbittorrent.exe
+[2026-05-09 09:23:56] [STEP] 步骤 4/7：配置并启动 qBittorrent
+[2026-05-09 09:23:56] [STEP] 正在同步 qBittorrent 配置...
+[2026-05-09 09:23:56] [OK] qBittorrent 配置已更新（启用 Web UI，端口 8080，默认下载目录：E:\\RBR）
+[2026-05-09 09:23:56] [STEP] 步骤 5/7：连接 qBittorrent API
+[2026-05-09 09:23:56] [STEP] 启动 qBittorrent 并打开 torrent...
+[2026-05-09 09:23:56] [OK] 已调用 qBittorrent 打开 torrent（保存路径已预填：E:\\RBR）
+[2026-05-09 09:23:56] [PROGRESS] QBT_STARTUP=5
+[2026-05-09 09:24:00] [PROGRESS] QBT_STARTUP=8
+[2026-05-09 09:24:04] [PROGRESS] QBT_STARTUP=11
+[2026-05-09 09:24:08] [PROGRESS] QBT_STARTUP=14
+[2026-05-09 09:24:12] [PROGRESS] QBT_STARTUP=17
+[2026-05-09 09:24:16] [PROGRESS] QBT_STARTUP=20
+[2026-05-09 09:24:20] [PROGRESS] QBT_STARTUP=23
+[2026-05-09 09:24:24] [PROGRESS] QBT_STARTUP=26
+[2026-05-09 09:24:28] [PROGRESS] QBT_STARTUP=29
+[2026-05-09 09:24:32] [PROGRESS] QBT_STARTUP=32
+[2026-05-09 09:24:37] [PROGRESS] QBT_STARTUP=35
+[2026-05-09 09:24:41] [PROGRESS] QBT_STARTUP=38
+[2026-05-09 09:24:45] [PROGRESS] QBT_STARTUP=41
+[2026-05-09 09:24:49] [PROGRESS] QBT_STARTUP=44
+[2026-05-09 09:24:53] [PROGRESS] QBT_STARTUP=47
+[2026-05-09 09:24:57] [PROGRESS] QBT_STARTUP=50
+[2026-05-09 09:25:01] [PROGRESS] QBT_STARTUP=53
+[2026-05-09 09:25:05] [PROGRESS] QBT_STARTUP=56
+[2026-05-09 09:25:09] [PROGRESS] QBT_STARTUP=59
+[2026-05-09 09:25:13] [PROGRESS] QBT_STARTUP=62
+[2026-05-09 09:25:17] [PROGRESS] QBT_STARTUP=65
+[2026-05-09 09:25:21] [PROGRESS] QBT_STARTUP=68
+[2026-05-09 09:25:25] [PROGRESS] QBT_STARTUP=71
+[2026-05-09 09:25:29] [PROGRESS] QBT_STARTUP=74
+[2026-05-09 09:25:34] [PROGRESS] QBT_STARTUP=77
+[2026-05-09 09:25:38] [PROGRESS] QBT_STARTUP=80
+[2026-05-09 09:25:42] [PROGRESS] QBT_STARTUP=83
+[2026-05-09 09:25:46] [PROGRESS] QBT_STARTUP=86
+[2026-05-09 09:25:50] [PROGRESS] QBT_STARTUP=89
+[2026-05-09 09:25:54] [PROGRESS] QBT_STARTUP=92
+[2026-05-09 09:26:00] [WARN] qBittorrent Web UI 未响应，使用非 API 模式监控进度
+[2026-05-09 09:26:00] [STEP] 步骤 6/7：以非 API 模式打开 Torrent
+[2026-05-09 09:26:00] [WARN] 当前为非 API 模式：脚本无法自动读取下载进度。
+[2026-05-09 09:26:00] [INFO] Preferred installer detected: E:\RBR\Rallysimfans_Installer.exe
+[2026-05-09 09:26:00] [INFO] GuiMode input prompt skipped:   已看到 Seeding/做种？输入 Y 立即启动安装器（直接回车=继续自动等待） (default='')
+[2026-05-09 09:26:00] [STEP] 等待安装器文件出现并自动启动
+[2026-05-09 09:26:00] [INFO] Installer search paths: E:\RBR; E:\Project Repo\RBR_Install_Tool; E:\Project Repo\RBR_Install_Tool\scripts; C:\Windows\System32
+[2026-05-09 09:26:01] [WARN] 检测到目录中已存在安装器文件，等待新下载的版本出现：E:\RBR\Rallysimfans_Installer.exe
+[2026-05-09 09:26:03] [WARN] 已发现安装器文件，但尚未确认 torrent 下载完成，暂不启动。
+[2026-05-09 09:26:03] [INFO] Installer candidate detected in wait loop: E:\RBR\Rallysimfans_Installer.exe
+[2026-05-09 09:26:03] [STEP] 仍在等待下载完成...
+[2026-05-09 09:26:47] [WARN] WebUI 未能确认完成，已按文件稳定性判定下载完成，准备启动安装器。
+[2026-05-09 09:26:47] [INFO] SEEDING_LAUNCH_READY=E:\RBR\Rallysimfans_Installer.exe
+[2026-05-09 09:26:50] [OK] 已自动启动安装器
+[2026-05-09 09:26:50] [OK] 安装助手任务完成！祝游戏顺利！
