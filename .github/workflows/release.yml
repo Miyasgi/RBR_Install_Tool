@@ -33,10 +33,16 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         shell: pwsh
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag ${{ steps.ver.outputs.value }}
-          git push origin ${{ steps.ver.outputs.value }}
+          $tag = "${{ steps.ver.outputs.value }}"
+          $exists = git tag -l $tag
+          if (-not $exists) {
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag $tag
+            git push origin $tag
+          } else {
+            Write-Host "Tag $tag already exists, skipping."
+          }
 
       - name: Build launcher EXE
         shell: pwsh
