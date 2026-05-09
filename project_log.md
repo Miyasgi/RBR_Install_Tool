@@ -358,3 +358,44 @@ What was NOT completed before session end:
 - Start from source, not from assumption.
 - First confirm whether duplicate backend instances still happen after the new lock checks.
 - If duplicate runs are eliminated and issue remains, focus only on the non-API completion heuristic in `Wait-InstallerAndLaunch`.
+
+## 15) Session Update (2026-05-08)
+
+### 15.1 Changes made this session (NOT YET fully tested)
+
+scripts/RBR_Auto_Installer.ps1:
+- Removed `Downloads\SavePath` from restart-trigger check in `Enable-QbtWebUIConfig`.
+  **Why:** SavePath format differences (trailing slash, etc.) caused needless qBittorrent restart every run → Web UI startup delay.
+- Restructured steps 4-5: open torrent immediately, poll Web UI in background (non-blocking).
+  **Why:** Previously waited up to 60s for Web UI BEFORE opening torrent. Now torrent opens instantly.
+- Added `$script:TorrentAlreadyOpened` flag to prevent duplicate torrent open in non-API block.
+- Fixed `Wait-InstallerAndLaunch`: `PreferredInstaller` now bypasses pre-existing file size check.
+  **Why:** Pre-existing check was blocking launch when file already existed from previous download with same size.
+- Added `SEEDING_LAUNCH_READY=<path>` log signal + 3s delay before auto-launching installer.
+- Fixed qBittorrent restart logic: kill existing process BEFORE starting new one when config updated.
+
+scripts/RBR_UI_Launcher.ps1:
+- Added `FormClosed` handler to kill backend process when monitor window closes.
+  **Why:** Backend was orphaned after UI close, holding lock file → next run blocked.
+- Added UI handler for `SEEDING_LAUNCH_READY` log signal → shows MessageBox popup.
+- Updated QBT_STARTUP label to show elapsed seconds instead of "约 10-60 秒".
+
+### 15.2 Still broken / not confirmed fixed
+
+1. **Two backend instances running simultaneously** — lock file not preventing duplicate launches.
+   - Log shows identical timestamps for both sets of step entries (20:21:29).
+   - Lock file mechanism exists but may be failing silently.
+   - Priority: investigate why lock is not working before anything else.
+
+2. **Web UI still not connecting (2 min timeout)** — SavePath fix not yet tested.
+   - All logs shown still from old code. Need fresh test with new code.
+
+3. **Pre-existing installer file detection** — fixed in code but not yet confirmed.
+
+### 15.3 First actions next session
+
+1. Clear log: `Clear-Content .\logs\RBR_Auto_Installer.log`
+2. Run fresh test via start.bat (admin).
+3. Check if TWO instances still appear in log — if yes, debug lock file mechanism first.
+4. Check if Web UI connects faster (SavePath fix should eliminate needless restarts).
+5. Check if installer launches when already at Seeding state.

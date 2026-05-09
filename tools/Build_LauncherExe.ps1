@@ -203,9 +203,20 @@ $cscCandidates = @(
     (Join-Path $env:WINDIR "Microsoft.NET\Framework64\v4.0.30319\csc.exe"),
     (Join-Path $env:WINDIR "Microsoft.NET\Framework\v4.0.30319\csc.exe")
 )
+
+# Also search Visual Studio Roslyn csc (needed on GitHub Actions / VS 2022+)
+$vswhere = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
+if (Test-Path $vswhere) {
+    $vsInstallPath = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -property installationPath 2>$null
+    if ($vsInstallPath) {
+        $roslynCsc = Join-Path $vsInstallPath "MSBuild\Current\Bin\Roslyn\csc.exe"
+        $cscCandidates += $roslynCsc
+    }
+}
+
 $csc = $cscCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $csc) {
-    throw "未找到 csc.exe，无法构建 EXE。"
+    throw "csc.exe not found. Searched: $($cscCandidates -join ', ')"
 }
 
 $tmpCs = Join-Path $distDir "__rbr_launcher_tmp.cs"
@@ -226,7 +237,7 @@ try {
 
     & $csc @args
     if ($LASTEXITCODE -ne 0) {
-        throw "csc 编译失败，退出码：$LASTEXITCODE"
+        throw "csc compilation failed with exit code: $LASTEXITCODE"
     }
 }
 finally {
@@ -235,10 +246,10 @@ finally {
 
 Copy-Item -Path $outExe -Destination $distExe -Force
 
-Write-Host "EXE 构建完成：$outExe" -ForegroundColor Green
-Write-Host "已同步到：$distExe" -ForegroundColor Green
+Write-Host "EXE built: $outExe" -ForegroundColor Green
+Write-Host "Synced to: $distExe" -ForegroundColor Green
 if ($iconForExe) {
-    Write-Host "已嵌入图标：$iconForExe" -ForegroundColor Green
+    Write-Host "Icon embedded: $iconForExe" -ForegroundColor Green
 } else {
-    Write-Host "未找到图标文件（RBR_INSTALLER.png / RBR_INSTALLER.ico），使用默认图标。" -ForegroundColor Yellow
+    Write-Host "Icon not found (RBR_INSTALLER.png / RBR_INSTALLER.ico), using default." -ForegroundColor Yellow
 }
