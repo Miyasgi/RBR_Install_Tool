@@ -1,62 +1,49 @@
-name: Release
+name: Manual Release
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
       version:
-        description: '版本号（如 v1.0.3）'
+        description: '版本号（如 v1.2.0）'
         required: true
-        default: 'v1.0.3'
 
 jobs:
-  build:
+  release:
     runs-on: windows-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Set version
-        id: ver
+      - name: Build launcher EXE
+        shell: pwsh
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\Build_LauncherExe.ps1
+
+      - name: Create tag
         shell: pwsh
         run: |
-          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-            echo "value=${{ github.event.inputs.version }}" >> $env:GITHUB_OUTPUT
-          } else {
-            echo "value=${{ github.ref_name }}" >> $env:GITHUB_OUTPUT
-          }
-
-      - name: Create tag (manual trigger only)
-        if: github.event_name == 'workflow_dispatch'
-        shell: pwsh
-        run: |
-          $tag = "${{ steps.ver.outputs.value }}"
+          $tag = "${{ github.event.inputs.version }}"
           $exists = git tag -l $tag
-          if (-not $exists) {
+          if ($exists) {
+            Write-Host "Tag $tag already exists, skipping."
+          } else {
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git tag $tag
             git push origin $tag
-          } else {
-            Write-Host "Tag $tag already exists, skipping."
           }
-
-      - name: Build launcher EXE
-        shell: pwsh
-        run: .\tools\Build_LauncherExe.ps1
 
       - name: Package release ZIP
         shell: pwsh
         run: |
-          $zipName = "RBR_Install_Tool_${{ steps.ver.outputs.value }}.zip"
+          $ver = "${{ github.event.inputs.version }}"
           $include = @("启动安装助手.bat", "RBR_Install_Assistant.exe", "README.md", "scripts", "assets")
-          Compress-Archive -Path $include -DestinationPath $zipName
+          Compress-Archive -Path $include -DestinationPath "RBR_Install_Tool_${ver}.zip"
 
       - name: Create GitHub Release
         shell: pwsh
-        run: gh release create ${{ steps.ver.outputs.value }} RBR_Install_Tool_*.zip --generate-notes --title ${{ steps.ver.outputs.value }}
+        run: gh release create ${{ github.event.inputs.version }} RBR_Install_Tool_*.zip --generate-notes --title ${{ github.event.inputs.version }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -371,9 +371,10 @@ function Read-QBittorrentPathFromUser {
 
 # ─── 测试 Web UI 是否可访问 ────────────────────────────────────────────────────
 function Test-QbtWebUI {
+    param([int]$TimeoutSec = 3)
     try {
         $resp = Invoke-WebRequest "http://${script:QbtHost}:${script:QbtPort}/api/v2/app/version" `
-            -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop
+            -TimeoutSec $TimeoutSec -UseBasicParsing -ErrorAction Stop
         return ($resp.StatusCode -lt 500)
     } catch {
         # 401/403 = Web UI is running but requires auth — still counts as "up"
@@ -455,12 +456,12 @@ function Wait-InstallerAndLaunch {
         }
     }
     if ($preExisting.Count -gt 0) {
-        Write-Warn "检测到目录中已存在安装器文件，等待新下载的版本出现：$($preExisting.Keys -join ', ')"
+        Write-Log -Level "INFO" -Message "检测到目录中已存在安装器文件，等待新下载的版本出现：$($preExisting.Keys -join ', ')"
     }
 
     $deadline = (Get-Date).AddMinutes($MaxMinutes)
     $lastHint = (Get-Date).AddSeconds(-60)
-    $lastProbe = (Get-Date).AddSeconds(-30)
+    $lastProbe = (Get-Date)
     $probeLogged = $false
     $lastNotDoneHint = (Get-Date).AddSeconds(-120)
     $stableCandidatePath = ""
@@ -490,7 +491,7 @@ function Wait-InstallerAndLaunch {
             }
         }
         # 非 API 模式严格约束：必须先确认 torrent 完成，再允许启动安装器
-        if (((Get-Date) - $lastProbe).TotalSeconds -ge 15) {
+        if (((Get-Date) - $lastProbe).TotalSeconds -ge 60) {
             $lastProbe = Get-Date
             if (Test-QbtTorrentCompletedFallback) {
                 if (-not $probeLogged) {
@@ -499,19 +500,8 @@ function Wait-InstallerAndLaunch {
                 }
                 $launchPath = if ($installerPath) { $installerPath } elseif ($PreferredInstaller -and (Test-Path $PreferredInstaller)) { $PreferredInstaller } else { $null }
                 if ($launchPath) {
-                    Write-OK "检测到 torrent 已完成（fallback API），即将启动安装器"
+                    Write-OK "检测到 torrent 已完成（fallback API），等待用户确认启动安装器"
                     Write-Log -Level "INFO" -Message "SEEDING_LAUNCH_READY=$launchPath"
-                    Start-Sleep -Seconds 3
-                    Write-Host ""
-                    Write-Host "  ┌─── 安装前必读 ───────────────────────────────────┐" -ForegroundColor Yellow
-                    Write-Host "  │  1. 弹出窗口后请选择 [Full Installation]         │" -ForegroundColor Yellow
-                    Write-Host "  │  2. 不建议安装到 C 盘，推荐 E:\\RBR             │" -ForegroundColor Yellow
-                    Write-Host "  │  3. 如杀毒软件拦截，请选择「允许/信任」          │" -ForegroundColor Yellow
-                    Write-Host "  │  4. 不要把游戏装在 Program Files 或桌面！        │" -ForegroundColor Yellow
-                    Write-Host "  └──────────────────────────────────────────────────┘" -ForegroundColor Yellow
-                    Write-Host ""
-                    Start-Process -FilePath $launchPath
-                    Write-OK "已自动启动安装器"
                     return $true
                 }
             }
@@ -534,17 +524,14 @@ function Wait-InstallerAndLaunch {
                 }
 
                 if ($stableCount -ge $stableRequiredCount -and $curSize -gt 0) {
-                    Write-Warn "WebUI 未能确认完成，已按文件稳定性判定下载完成，准备启动安装器。"
+                    Write-OK "文件已稳定，判定下载完成，等待用户确认启动安装器。"
                     Write-Log -Level "INFO" -Message "SEEDING_LAUNCH_READY=$installerPath"
-                    Start-Sleep -Seconds 3
-                    Start-Process -FilePath $installerPath
-                    Write-OK "已自动启动安装器"
                     return $true
                 }
             } catch {}
 
             if (((Get-Date) - $lastNotDoneHint).TotalSeconds -ge 60) {
-                Write-Warn "已发现安装器文件，但尚未确认 torrent 下载完成，暂不启动。"
+                Write-Log -Level "INFO" -Message "已发现安装器文件，等待 torrent 做种完成确认..."
                 $lastNotDoneHint = Get-Date
             }
         }
@@ -659,6 +646,7 @@ $script:QbtPass     = $QbtPass
 $script:RunTag      = "rbr_auto_{0}" -f (Get-Date -Format "yyyyMMdd_HHmmss")
 
 function Connect-Qbt {
+    param([switch]$Silent)
     $script:QbtBaseUrl = "http://${script:QbtHost}:${script:QbtPort}/api/v2"
 
     # LocalHostAuth=false 时无需登录，直接用空 session 也能访问
@@ -674,7 +662,7 @@ function Connect-Qbt {
                 -ContentType "application/x-www-form-urlencoded" `
                 -SessionVariable "sess" -UseBasicParsing | Out-Null
             $script:QbtSession = $sess
-            Write-OK "已连接 qBittorrent Web API（本地免认证模式）"
+            if (-not $Silent) { Write-OK "已连接 qBittorrent Web API（本地免认证模式）" }
             return $true
         }
     } catch {}
@@ -689,13 +677,13 @@ function Connect-Qbt {
 
         if ($resp.Content -eq "Ok.") {
             $script:QbtSession = $sess
-            Write-OK "已连接 qBittorrent Web API（用户名/密码认证）"
+            if (-not $Silent) { Write-OK "已连接 qBittorrent Web API（用户名/密码认证）" }
             return $true
         }
-        Write-Fail "qBittorrent 登录失败，响应：$($resp.Content)"
+        if (-not $Silent) { Write-Fail "qBittorrent 登录失败，响应：$($resp.Content)" }
         return $false
     } catch {
-        Write-Fail "无法连接 qBittorrent Web API：$_"
+        if (-not $Silent) { Write-Fail "无法连接 qBittorrent Web API：$_" }
         return $false
     }
 }
@@ -760,7 +748,7 @@ function Test-QbtTorrentCompletedFallback {
     try {
         if (-not (Test-QbtWebUI)) { return $false }
         if (-not $script:QbtSession) {
-            if (-not (Connect-Qbt)) { return $false }
+            if (-not (Connect-Qbt -Silent)) { return $false }
         }
 
         $torrents = @(Get-QbtTorrents)
@@ -1025,7 +1013,6 @@ Write-Step "步骤 4/7：配置并启动 qBittorrent"
 
 $alreadyReady = Enable-QbtWebUIConfig -PreferredSavePath $DownloadPath
 $useQbtApi = $false
-$webUiWaitTimeoutSec = 60
 
 $qbtRunning = Get-Process "qbittorrent" -ErrorAction SilentlyContinue
 if ($qbtRunning -and -not $alreadyReady) {
@@ -1050,17 +1037,18 @@ if ($alreadyReady -and $qbtRunning -and (Test-QbtWebUI)) {
     $script:TorrentAlreadyOpened = $true
 
     Write-Log -Level "PROGRESS" -Message "QBT_STARTUP=5"
+    $webUiWaitTimeoutSec = 15
     $waited  = 0
-    $pollSec = 2
-    while (-not (Test-QbtWebUI)) {
+    $pollSec = 1
+    while ($waited -lt $webUiWaitTimeoutSec) {
         Start-Sleep -Seconds $pollSec
         $waited += $pollSec
-        if ($waited -ge $webUiWaitTimeoutSec) { break }
         $pct = [int]([math]::Min(5 + $waited * 90 / $webUiWaitTimeoutSec, 99))
         Write-Log -Level "PROGRESS" -Message ("QBT_STARTUP={0}" -f $pct)
+        if (Test-QbtWebUI -TimeoutSec 1) { break }
     }
 
-    if (Test-QbtWebUI) {
+    if (Test-QbtWebUI -TimeoutSec 1) {
         Write-Log -Level "PROGRESS" -Message "QBT_STARTUP=100"
         Write-OK "qBittorrent Web UI 已就绪（端口 $QbtPort）"
         $connected = Connect-Qbt
@@ -1084,7 +1072,7 @@ if (-not $useQbtApi) {
     }
 
     Write-Host ""
-    Write-Warn "当前为非 API 模式：脚本无法自动读取下载进度。"
+    Write-Log -Level "INFO" -Message "当前为非 API 模式：脚本无法自动读取下载进度。"
     Write-Host "  已自动转为目录轮询模式：检测到安装器后会自动启动。" -ForegroundColor Yellow
     Write-Host ""
     Write-Host "  ╔══════════════════════════════════════════════════╗" -ForegroundColor Red
@@ -1145,7 +1133,9 @@ Write-Step "步骤 6/7：添加 Torrent 到下载队列"
 Write-Host "  文件：$TorrentFile"
 Write-Host "  保存：$DownloadPath"
 
-if (-not (Add-QbtTorrent -TorrentPath $TorrentFile -SavePath $DownloadPath)) {
+if ($script:TorrentAlreadyOpened) {
+    Write-OK "Torrent 已通过界面打开，等待 qBittorrent 注册..."
+} elseif (-not (Add-QbtTorrent -TorrentPath $TorrentFile -SavePath $DownloadPath)) {
     Pause-IfConsole "`n按 Enter 退出"
     exit 1
 }
@@ -1157,16 +1147,19 @@ Write-Host "  提示：关闭此窗口会中止监控，但 qBittorrent 仍会�
 Write-Host "        下载完成后它会自动打开安装器" -ForegroundColor DarkGray
 Write-Host ""
 
-# 等待 qBt 注册 torrent
-Start-Sleep -Seconds 5
+# 等待 qBt 注册 torrent（GUI 打开时用户需先在对话框点 OK，稍多等一些）
+$regWaitSec = if ($script:TorrentAlreadyOpened) { 8 } else { 5 }
+Start-Sleep -Seconds $regWaitSec
 
-$completed    = $false
-$lastProgress = -1.0
-$doneStates   = @("uploading","stalledUP","pausedUP","queuedUP","checkingUP","forcedUP","completed")
+$completed      = $false
+$lastProgress   = -1.0
+$apiErrorCount  = 0
+$doneStates     = @("uploading","stalledUP","pausedUP","queuedUP","checkingUP","forcedUP","completed")
 
 while (-not $completed) {
     try {
         $torrents = @(Get-QbtTorrents)
+        $apiErrorCount = 0
 
         if ($torrents.Count -gt 0) {
             # 优先按本次运行的唯一 Tag 精确匹配
@@ -1211,10 +1204,19 @@ while (-not $completed) {
                 $completed = $true
             }
         } else {
-            Write-Warn "暂未检测到 torrent，等待中..."
+            Write-Log -Level "INFO" -Message "暂未检测到 torrent，等待中..."
         }
     } catch {
-        Write-Warn "检查进度出错（$_），$PollSeconds 秒后重试"
+        $apiErrorCount++
+        $script:QbtSession = $null
+        $reconnected = $false
+        try {
+            if (Test-QbtWebUI) { $reconnected = Connect-Qbt -Silent }
+        } catch {}
+        if (-not $reconnected -and $apiErrorCount -ge 3) {
+            Write-Warn "连接 qBittorrent 失败（已重试 $apiErrorCount 次），$PollSeconds 秒后继续..."
+            $apiErrorCount = 0
+        }
     }
 
     if (-not $completed) {
@@ -1237,16 +1239,7 @@ $installerPath = if ($preferredInstaller) { $preferredInstaller } else { Find-In
 
 if ($installerPath) {
     Write-OK "找到安装器：$installerPath"
-    Write-Host ""
-    Write-Host "  ┌─── 安装前必读 ───────────────────────────────────┐" -ForegroundColor Yellow
-    Write-Host "  │  1. 弹出窗口后请选择 [Full Installation]         │" -ForegroundColor Yellow
-    Write-Host "  │  2. 不建议安装到 C 盘，推荐 E:\\RBR             │" -ForegroundColor Yellow
-    Write-Host "  │  3. 如杀毒软件拦截，请选择「允许/信任」          │" -ForegroundColor Yellow
-    Write-Host "  │  4. 不要把游戏装在 Program Files 或桌面！        │" -ForegroundColor Yellow
-    Write-Host "  └──────────────────────────────────────────────────┘" -ForegroundColor Yellow
-    Write-Host ""
-    Start-Process $installerPath
-    Write-OK "已自动启动安装器"
+    Write-Log -Level "INFO" -Message "SEEDING_LAUNCH_READY=$installerPath"
 } else {
     Write-Warn "未自动找到安装器 EXE，正在打开下载目录..."
     Write-Host "  请手动运行目录中的 Rallysimfans_Installer_*.exe" -ForegroundColor Yellow
