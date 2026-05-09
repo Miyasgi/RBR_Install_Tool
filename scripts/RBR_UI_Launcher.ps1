@@ -535,6 +535,11 @@ function Show-RunMonitor {
 
     $mForm.Add_FormClosed({
         try { $timer.Stop() } catch {}
+        try {
+            if ($currentProcess -and -not $currentProcess.HasExited) {
+                $currentProcess.Kill()
+            }
+        } catch {}
     })
 
     $timer.Start()
