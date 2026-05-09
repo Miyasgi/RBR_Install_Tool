@@ -1014,9 +1014,15 @@ $alreadyReady = Enable-QbtWebUIConfig -PreferredSavePath $DownloadPath
 $useQbtApi = $true
 $webUiWaitTimeoutSec = 60   # 给低配机器足够的启动时间
 
-# 启动 qBittorrent（如果没有运行，或者刚才关闭了它）
+# 启动 qBittorrent（如果没有运行，或者刚才修改了配置需要重启）
 $qbtRunning = Get-Process "qbittorrent" -ErrorAction SilentlyContinue
-if (-not $qbtRunning -or -not $alreadyReady) {
+if ($qbtRunning -and -not $alreadyReady) {
+    Write-Step "配置已更新，重启 qBittorrent 使 Web UI 生效..."
+    $qbtRunning | Stop-Process -Force
+    Start-Sleep -Seconds 2
+    $qbtRunning = $null
+}
+if (-not $qbtRunning) {
     Write-Step "启动 qBittorrent..."
     Start-Process $qbtExe
     Write-Host ""
