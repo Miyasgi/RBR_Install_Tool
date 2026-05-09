@@ -1,4 +1,4 @@
-name: Build EXE
+name: Build and Release
 
 on:
   push:
@@ -6,12 +6,14 @@ on:
       - main
 
 jobs:
-  build:
+  build-and-release:
     runs-on: windows-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Build launcher EXE
         shell: pwsh
@@ -24,8 +26,41 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add RBR_Install_Assistant.exe dist/RBR_Install_Assistant.exe
           if (git diff --cached --quiet) {
-            Write-Host "No changes to commit"
+            Write-Host "No EXE changes to commit"
           } else {
             git commit -m "chore: auto-build EXE [skip ci]"
             git push
           }
+
+      - name: Determine next version
+        id: ver
+        shell: pwsh
+        run: |
+          git fetch --tags
+          $latest = git tag -l "v*" | Where-Object { $_ -match '^v\d+\.\d+\.\d+$' } |
+            Sort-Object { [version]($_ -replace '^v','') } -Descending |
+            Select-Object -First 1
+          if (-not $latest) { $latest = "v0.0.0" }
+          $parts = ($latest -replace '^v','').Split('.')
+          $next = "v{0}.{1}.{2}" -f $parts[0], $parts[1], ([int]$parts[2] + 1)
+          Write-Host "Latest: $latest  ->  Next: $next"
+          echo "value=$next" >> $env:GITHUB_OUTPUT
+
+      - name: Create tag
+        shell: pwsh
+        run: |
+          git tag ${{ steps.ver.outputs.value }}
+          git push origin ${{ steps.ver.outputs.value }}
+
+      - name: Package release ZIP
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.ver.outputs.value }}"
+          $include = @("启动安装助手.bat", "RBR_Install_Assistant.exe", "README.md", "scripts", "assets")
+          Compress-Archive -Path $include -DestinationPath "RBR_Install_Tool_${ver}.zip"
+
+      - name: Create GitHub Release
+        shell: pwsh
+        run: gh release create ${{ steps.ver.outputs.value }} RBR_Install_Tool_*.zip --generate-notes --title ${{ steps.ver.outputs.value }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

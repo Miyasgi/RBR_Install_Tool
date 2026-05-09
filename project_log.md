@@ -399,3 +399,40 @@ scripts/RBR_UI_Launcher.ps1:
 3. Check if TWO instances still appear in log — if yes, debug lock file mechanism first.
 4. Check if Web UI connects faster (SavePath fix should eliminate needless restarts).
 5. Check if installer launches when already at Seeding state.
+
+## 16) Session Update (2026-05-09)
+
+### 16.1 Confirmed working
+
+- Seeding detection now works: script detects 100%/Seeding and auto-launches installer.
+- UI shows popup "检测到下载完成（Seeding），安装器将在 3 秒后自动启动".
+- Single-instance Mutex (Local\RBR_Auto_Installer) prevents duplicate backend processes.
+- Popup only shows once per monitor session ($seedingPopupShown flag).
+
+### 16.2 Fixes applied this session
+
+scripts/RBR_Auto_Installer.ps1:
+- Fixed Test-QbtWebUI: added null guard for $_.Exception.Response (crash when port not open yet).
+- Fixed Test-QbtWebUI: now treats 401/403 as "Web UI is up" (was rejecting valid responses requiring auth).
+- Replaced file-lock with named Mutex (Local\RBR_Auto_Installer) for single-instance enforcement.
+- Fixed Wait-InstallerAndLaunch: PreferredInstaller bypasses pre-existing file size check.
+
+scripts/RBR_UI_Launcher.ps1:
+- Added $seedingPopupShown flag to prevent duplicate popups when multiple log entries appear.
+- Replaced file-lock check with Mutex check in Test-BackendRunLockInUse.
+
+### 16.3 Release workflow — still broken
+
+Current state:
+- workflow_dispatch trigger added to release.yml.
+- softprops/action-gh-release@v2 replaced with gh CLI (gh release create).
+- Tag auto-creation added for manual trigger, with skip-if-exists guard.
+- BUT: main branch keeps rejecting push (non-fast-forward) — remote main has diverged.
+- Every attempt to push fix hits "rejected: non-fast-forward" → requires git pull --rebase each time.
+
+### 16.4 First actions next session
+
+1. Fix the git push issue: `git pull origin main --rebase && git push origin main`
+2. Go to GitHub → Actions → Release → Run workflow → select correct branch → fill version.
+3. If gh release create still fails, check exact error message from the step.
+4. Consider just using tag push (git tag v1.0.x && git push origin v1.0.x) as the primary release method — simpler and more reliable than workflow_dispatch.

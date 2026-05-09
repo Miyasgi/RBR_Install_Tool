@@ -1,181 +1,151 @@
-# RBR Auto Installer (Super Simple Guide) / RBR 自动安装助手（超小白说明）
-
-This tool is made for users with very little computer experience.
-If you can only download files and double-click, this guide is for you.
-
-这个工具按“电脑小白”标准写的。
-就算你只会下载文件和双击，也可以照着用。
+[中文](#中文) | [English](#english)
 
 ---
 
-## A) 3-Step Start / 三步启动
+<a name="中文"></a>
 
-### Chinese (Recommended)
+# RBR 自动安装助手
 
-1. **先解压** ZIP 压缩包到一个普通文件夹（不要在压缩包里直接点运行）。
-2. 在解压后的文件夹里，右键 **启动安装助手.bat**，点 **以管理员身份运行**。
-3. 弹出系统确认窗口时，点 **是**，然后等待自动下载和自动弹出安装器。
-
-### English
-
-1. **Extract** the ZIP file first (do not run inside the ZIP preview).
-2. In the extracted folder, right-click **启动安装助手.bat** and choose **Run as administrator**.
-3. Click **Yes** on UAC prompt, then wait for automatic download and installer launch.
+自动帮你下载并启动 RBR（Richard Burns Rally）官方安装器的小工具。全程图形界面，无需手动操作 qBittorrent。
 
 ---
 
-## B) Folder Layout / 文件结构（已整理）
+## 使用方法
 
-### Chinese
+### 第一次使用
 
-请保持以下结构，不要随意改名：
+1. 解压 ZIP 压缩包到任意普通文件夹（**不要在压缩包内直接运行**）
+2. 双击 `RBR_Install_Assistant.exe`
+3. 弹出 UAC 窗口时点 **是**
 
-1. 启动入口：启动安装助手.bat
-2. 脚本目录：scripts\RBR_UI_Launcher.ps1 / scripts\RBR_Auto_Installer.ps1
-3. 资源目录：assets\RBR_INSTALLER.png / assets\RBR_INSTALLER.ico
-4. 构建脚本：tools\Build_LauncherExe.ps1
-5. 可执行文件：dist\RBR_Install_Assistant.exe
+### 正常流程
 
-### English
+启动后会出现一个图形界面，按提示操作：
 
-Please keep this structure (do not rename files):
-
-1. Entry: 启动安装助手.bat
-2. Scripts: scripts\RBR_UI_Launcher.ps1 / scripts\RBR_Auto_Installer.ps1
-3. Assets: assets\RBR_INSTALLER.png / assets\RBR_INSTALLER.ico
-4. Build script: tools\Build_LauncherExe.ps1
-5. Executable: dist\RBR_Install_Assistant.exe
+1. 选择 `.torrent` 种子文件（默认会自动从官网获取）
+2. 选择下载路径（建议选 C 盘以外的盘，如 `E:\RBR`）
+3. 点击 **开始下载**
+4. 程序会自动启动 qBittorrent 并开始下载
+5. 下载完成（qBittorrent 显示 Seeding）后，程序自动弹出提示并打开安装器
+6. 安装器打开后选择 **Full Installation**，路径建议用 `E:\RBR`
 
 ---
 
-## B.1) Official Download Links (Fallback) / 官方下载链接（兜底）
+## 常见问题
 
-### Chinese
+### 窗口一闪而过
 
-如果你丢了文件，或者版本更新导致旧文件失效，用下面这个官网入口最稳：
+- 确认已解压，不是在压缩包内运行
+- 确认右键用了**管理员身份运行**
 
-1. 官网入口（推荐，长期有效概率最高）
-https://www.rallysimfans.hu/rbr/download.php?download=rsfrbr
+### 找不到 qBittorrent / 提示未安装
 
-2. 种子直链（版本号可能变化，可能过期）
-https://www.rallysimfans.hu/rbr/downloads/Rallysimfans_Installer/rsf_installer_files_V4.6.torrent
+工具会自动提示下载，点击界面里的 **下载 qB 最新版** 按钮，安装完成后点 **我已安装 qB，继续** 即可，不需要重新打开工具。
 
-3. 安装器直链（参数可能变化，可能过期）
-https://www.rallysimfans.hu/rbr/downloads/Rallysimfans_Installer/Rallysimfans_Installer.exe?a9f2757c3ba9a6bc8b9abfa0e514cf12
+### 下载完了但安装器没有自动打开
 
-### English
+1. 等待界面出现"检测到下载完成"的弹窗，点 OK
+2. 如果长时间没有弹窗，点界面里的 **已完成下载，启动安装器** 按钮
+3. 或者手动去下载目录（如 `E:\RBR`）找 `Rallysimfans_Installer*.exe` 双击运行
 
-If files are missing or old links stop working, use this official page first:
+### 杀毒软件拦截了文件
 
-1. Official page (recommended, most stable)
-https://www.rallysimfans.hu/rbr/download.php?download=rsfrbr
+将工具所在文件夹加入杀毒软件的信任/白名单，然后恢复被隔离的文件重试。
 
-2. Torrent direct link (version may change and expire)
-https://www.rallysimfans.hu/rbr/downloads/Rallysimfans_Installer/rsf_installer_files_V4.6.torrent
+### qBittorrent 弹出窗口，保存路径不对
 
-3. Installer direct link (query token may change and expire)
-https://www.rallysimfans.hu/rbr/downloads/Rallysimfans_Installer/Rallysimfans_Installer.exe?a9f2757c3ba9a6bc8b9abfa0e514cf12
+在弹出的"添加种子"窗口里，手动把 **Save at / 保存到** 改为你选择的下载路径，再点 OK。
 
 ---
 
-## C) What User Will See / 用户会看到什么
+## 官方下载链接（备用）
 
-### Chinese
+如果工具无法自动获取种子文件，可以手动下载：
 
-1. 脚本会自动检查 qBittorrent。
-2. 没安装的话会提示你去官网下载并安装。
-3. 下载过程中会显示进度条。
-4. 下载完成后会自动打开安装器。
-5. 安装器里请选 **Full Installation**。
-6. 安装路径建议选 `E:\RBR`（不要装在 C 盘）。
-
-### English
-
-1. The script checks qBittorrent automatically.
-2. If missing, it prompts user to install qBittorrent.
-3. Download progress is shown.
-4. Installer opens automatically after download.
-5. Choose **Full Installation**.
-6. Install to `E:\RBR` (avoid C drive).
+- 官网页面（最稳定）：`https://www.rallysimfans.hu/rbr/download.php?download=rsfrbr`
+- 种子直链（版本号可能变化）：`https://www.rallysimfans.hu/rbr/downloads/Rallysimfans_Installer/rsf_installer_files_V4.6.torrent`
 
 ---
 
-## D) Most Common Problems / 最常见问题（按这个排查）
+## 日志文件
 
-### 1) "Window closes too fast" / "窗口一闪而过"
+遇到问题时，日志在：
 
-Chinese:
-
-1. 先确认已经解压，不是在压缩包里运行。
-2. 确认 3 个必需文件都在同一个文件夹。
-3. 再右键管理员运行 启动安装助手.bat。
-
-English:
-
-1. Make sure ZIP is extracted.
-2. Make sure all 3 required files are present.
-3. Run 启动安装助手.bat as administrator.
-
-### 2) qBittorrent not found / 找不到 qBittorrent
-
-Chinese:
-
-1. 从官网安装：https://www.qbittorrent.org/download
-2. 安装后重新运行脚本。
-3. 仍然找不到时，按提示手动选择 qbittorrent.exe。
-
-English:
-
-1. Install from official site: https://www.qbittorrent.org/download
-2. Re-run the script.
-3. If still not found, manually pick qbittorrent.exe.
-
-### 3) Download done but installer not opened / 下载完没有自动弹安装器
-
-Chinese:
-
-1. 到下载目录（通常是 `E:\RBR`）里找 `Rallysimfans_Installer*.exe`。
-2. 手动双击它即可继续。
-
-English:
-
-1. Open download folder (usually `E:\RBR`).
-2. Run `Rallysimfans_Installer*.exe` manually.
-
-### 4) Antivirus blocks file / 杀毒软件拦截
-
-Chinese:
-
-1. 把这个工具文件夹加入信任/白名单。
-2. 恢复被隔离文件后重试。
-
-English:
-
-1. Add this folder to AV allowlist.
-2. Restore blocked files and retry.
-
----
-
-## E) For Group Owner (You) / 给发群主的建议
-
-### Chinese
-
-建议发 ZIP，并附这句：
-
-先解压，再右键管理员运行 启动安装助手.bat，不要在压缩包里直接打开。
-
-### English
-
-Send as ZIP with this one-line note:
-
-Extract first, then run 启动安装助手.bat as administrator. Do not run from inside ZIP preview.
-
----
-
-## F) Log File / 日志
-
-If user has problems, ask for this file:
-
-用户报错时，让他发这个文件：
-
+```
 logs\RBR_Auto_Installer.log
+```
+
+---
+
+<a name="english"></a>
+
+# RBR Auto Installer
+
+A tool that automatically downloads and launches the official RBR (Richard Burns Rally) installer. Fully GUI-based — no need to manually operate qBittorrent.
+
+---
+
+## How to Use
+
+### First Time Setup
+
+1. Extract the ZIP to any regular folder (**do not run directly inside the ZIP preview**)
+2. Double-click `RBR_Install_Assistant.exe`
+3. Click **Yes** on the UAC prompt
+
+### Normal Flow
+
+A GUI window will appear. Follow the steps:
+
+1. Select a `.torrent` file (the tool can fetch it automatically from the official site)
+2. Choose a download path (recommended: a non-C drive, e.g. `E:\RBR`)
+3. Click **Start Download**
+4. The tool starts qBittorrent and begins downloading automatically
+5. When the download finishes (qBittorrent shows Seeding), a popup appears and the installer opens automatically
+6. In the installer, choose **Full Installation** and use a path like `E:\RBR`
+
+---
+
+## Common Problems
+
+### Window closes immediately
+
+- Make sure the ZIP is fully extracted before running
+- Make sure you right-clicked and chose **Run as administrator**
+
+### qBittorrent not found
+
+The tool will offer to download it for you. Click **Download latest qB** in the interface, install it, then click **I've installed qB, continue** — no need to restart the tool.
+
+### Download finished but installer didn't open
+
+1. Wait for the "Download complete (Seeding detected)" popup and click OK
+2. If no popup appears after a long wait, click the **Launch Installer** button in the interface
+3. Or manually open your download folder (e.g. `E:\RBR`) and run `Rallysimfans_Installer*.exe`
+
+### Antivirus blocked a file
+
+Add the tool's folder to your antivirus allowlist/whitelist, restore any quarantined files, then try again.
+
+### qBittorrent dialog shows wrong save path
+
+In the "Add Torrent" dialog, manually change **Save at** to your chosen download path, then click OK.
+
+---
+
+## Official Download Links (Fallback)
+
+If the tool cannot fetch the torrent automatically:
+
+- Official page (most reliable): `https://www.rallysimfans.hu/rbr/download.php?download=rsfrbr`
+- Torrent direct link (version may change): `https://www.rallysimfans.hu/rbr/downloads/Rallysimfans_Installer/rsf_installer_files_V4.6.torrent`
+
+---
+
+## Log File
+
+If something goes wrong, share this file:
+
+```
+logs\RBR_Auto_Installer.log
+```
