@@ -203,9 +203,20 @@ $cscCandidates = @(
     (Join-Path $env:WINDIR "Microsoft.NET\Framework64\v4.0.30319\csc.exe"),
     (Join-Path $env:WINDIR "Microsoft.NET\Framework\v4.0.30319\csc.exe")
 )
+
+# Also search Visual Studio Roslyn csc (needed on GitHub Actions / VS 2022+)
+$vswhere = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
+if (Test-Path $vswhere) {
+    $vsInstallPath = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -property installationPath 2>$null
+    if ($vsInstallPath) {
+        $roslynCsc = Join-Path $vsInstallPath "MSBuild\Current\Bin\Roslyn\csc.exe"
+        $cscCandidates += $roslynCsc
+    }
+}
+
 $csc = $cscCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $csc) {
-    throw "未找到 csc.exe，无法构建 EXE。"
+    throw "未找到 csc.exe，无法构建 EXE。已搜索路径：$($cscCandidates -join ', ')"
 }
 
 $tmpCs = Join-Path $distDir "__rbr_launcher_tmp.cs"
