@@ -67,6 +67,7 @@ $script:StartTime  = Get-Date
 $script:RsfOfficialDownloadPage = "https://www.rallysimfans.hu/rbr/download.php?download=rsfrbr"
 $script:QbtLatestDownloadLink = "https://sourceforge.net/projects/qbittorrent/files/latest/download"
 
+$script:TorrentAlreadyOpened = $false
 $script:RunLockStream = $null
 $script:RunLockPath = Join-Path $script:ProjectRoot "RBR_Auto_Installer.lock"
 try {
@@ -466,23 +467,23 @@ function Wait-InstallerAndLaunch {
 
     while ((Get-Date) -lt $deadline) {
         $installerPath = Find-InstallerFromPaths -SearchPaths $SearchPaths
-        # 跳过脚本启动前就已存在且未变化的文件；若同一路径文件被更新，则视为新文件
+        # 跳过脚本启动前就已存在且未变化的文件，防止误启动旧备份
+        # 例外：用户明确指定的 PreferredInstaller 不做此限制（已存在即可用）
         if ($installerPath -and $preExisting.ContainsKey($installerPath)) {
-            $oldFp = $preExisting[$installerPath]
-            $isUpdated = $false
-            try {
-                $cur = Get-Item -Path $installerPath -ErrorAction Stop
-                $curLen = [int64]$cur.Length
-                # 仅用文件大小变化判定“新下载/更新”，避免做种阶段修改时间戳导致误判。
-                if ($curLen -ne $oldFp.Length) {
-                    $isUpdated = $true
+            $isPreferred = ($PreferredInstaller -and
+                ([System.IO.Path]::GetFullPath($installerPath) -eq [System.IO.Path]::GetFullPath($PreferredInstaller)))
+            if (-not $isPreferred) {
+                $oldFp = $preExisting[$installerPath]
+                $isUpdated = $false
+                try {
+                    $curLen = [int64](Get-Item -Path $installerPath -ErrorAction Stop).Length
+                    if ($curLen -ne $oldFp.Length) { $isUpdated = $true }
+                } catch {}
+                if (-not $isUpdated) {
+                    $installerPath = $null
+                } else {
+                    Write-OK “检测到安装器文件已更新：$installerPath”
                 }
-            } catch {}
-
-            if (-not $isUpdated) {
-                $installerPath = $null
-            } else {
-                Write-OK "检测到安装器文件已更新：$installerPath"
             }
         }
         # 非 API 模式严格约束：必须先确认 torrent 完成，再允许启动安装器
@@ -496,6 +497,8 @@ function Wait-InstallerAndLaunch {
                 $launchPath = if ($installerPath) { $installerPath } elseif ($PreferredInstaller -and (Test-Path $PreferredInstaller)) { $PreferredInstaller } else { $null }
                 if ($launchPath) {
                     Write-OK "检测到 torrent 已完成（fallback API），即将启动安装器"
+                    Write-Log -Level "INFO" -Message "SEEDING_LAUNCH_READY=$launchPath"
+                    Start-Sleep -Seconds 3
                     Write-Host ""
                     Write-Host "  ┌─── 安装前必读 ───────────────────────────────────┐" -ForegroundColor Yellow
                     Write-Host "  │  1. 弹出窗口后请选择 [Full Installation]         │" -ForegroundColor Yellow
@@ -529,6 +532,8 @@ function Wait-InstallerAndLaunch {
 
                 if ($stableCount -ge $stableRequiredCount -and $curSize -gt 0) {
                     Write-Warn "WebUI 未能确认完成，已按文件稳定性判定下载完成，准备启动安装器。"
+                    Write-Log -Level "INFO" -Message "SEEDING_LAUNCH_READY=$installerPath"
+                    Start-Sleep -Seconds 3
                     Start-Process -FilePath $installerPath
                     Write-OK "已自动启动安装器"
                     return $true
@@ -578,23 +583,28 @@ function Enable-QbtWebUIConfig {
         $ini = $ini.TrimEnd() + "`r`n[Preferences]`r`n"
     }
 
-    # 需要写入的 Web UI 键值（qBt 在 ini 中用反斜杠分隔层级）
-    $settings = [ordered]@{
+    # Web UI 必须匹配的核心设置（这些决定是否需要重启）
+    $requiredSettings = [ordered]@{
         'WebUI\Enabled'       = 'true'
         'WebUI\Port'          = $script:QbtPort
         'WebUI\Address'       = '127.0.0.1'
         'WebUI\Username'      = $script:QbtUser
-        'WebUI\LocalHostAuth' = 'false'   # 本机访问无需密码，脚本友好
+        'WebUI\LocalHostAuth' = 'false'
     }
 
+    # SavePath 单独写入但不触发重启检查（路径格式差异会误判导致不必要的重启）
+    $extraSettings = [ordered]@{}
     if ($PreferredSavePath) {
-        # 让 qBittorrent 添加种子对话框默认指向脚本选定下载目录
-        $settings['Downloads\SavePath'] = $PreferredSavePath
+        $extraSettings['Downloads\SavePath'] = $PreferredSavePath
     }
 
-    # 若配置已满足且 WebUI 可访问，则不重启 qB（加快流程）
+    $settings = [ordered]@{}
+    foreach ($kv in $requiredSettings.GetEnumerator()) { $settings[$kv.Key] = $kv.Value }
+    foreach ($kv in $extraSettings.GetEnumerator())  { $settings[$kv.Key] = $kv.Value }
+
+    # 只用核心设置判断是否需要重启
     $needsUpdate = $false
-    foreach ($kv in $settings.GetEnumerator()) {
+    foreach ($kv in $requiredSettings.GetEnumerator()) {
         $k = [regex]::Escape($kv.Key)
         $v = [string]$kv.Value
         $pattern = "(?m)^$k\s*=\s*" + [regex]::Escape($v) + "$"
@@ -1007,14 +1017,13 @@ if (-not $qbtExe) {
 Write-OK "qBittorrent：$qbtExe"
 Save-QBittorrentPathCache -ExePath $qbtExe
 
-# ── 步骤 4：启用 Web UI 并启动 qBittorrent ─────────────────────────────────────
-Write-Step "步骤 4/7：配置并启动 qBittorrent Web UI"
+# ── 步骤 4：配置 Web UI 并启动 qBittorrent ────────────────────────────────────
+Write-Step "步骤 4/7：配置并启动 qBittorrent"
 
 $alreadyReady = Enable-QbtWebUIConfig -PreferredSavePath $DownloadPath
-$useQbtApi = $true
-$webUiWaitTimeoutSec = 60   # 给低配机器足够的启动时间
+$useQbtApi = $false
+$webUiWaitTimeoutSec = 60
 
-# 启动 qBittorrent（如果没有运行，或者刚才修改了配置需要重启）
 $qbtRunning = Get-Process "qbittorrent" -ErrorAction SilentlyContinue
 if ($qbtRunning -and -not $alreadyReady) {
     Write-Step "配置已更新，重启 qBittorrent 使 Web UI 生效..."
@@ -1022,82 +1031,53 @@ if ($qbtRunning -and -not $alreadyReady) {
     Start-Sleep -Seconds 2
     $qbtRunning = $null
 }
-if (-not $qbtRunning) {
-    Write-Step "启动 qBittorrent..."
-    Start-Process $qbtExe
-    Write-Host ""
-
-    $waited   = 0
-    $pollSec  = 2
-    $barWidth = 30
-
-    while (-not (Test-QbtWebUI)) {
-        Start-Sleep -Seconds $pollSec
-        $waited += $pollSec
-        if ($waited -ge $webUiWaitTimeoutSec) { break }
-
-        $pct    = [int]([math]::Min($waited * 100 / $webUiWaitTimeoutSec, 99))
-        $filled = [int]($pct / 100 * $barWidth)
-        $bar    = ("█" * $filled).PadRight($barWidth, "░")
-        $line   = "  [*] 正在打开 torrent 种子文件，请等待...  [{0}] {1,3}%" -f $bar, $pct
-        Write-Host ("`r" + $line) -NoNewline -ForegroundColor Cyan
-        Write-Log -Level "PROGRESS" -Message ("QBT_STARTUP={0}" -f $pct)
-    }
-
-    if (Test-QbtWebUI) {
-        $bar  = "█" * $barWidth
-        $line = "  [*] 正在打开 torrent 种子文件，请等待...  [{0}] 100%" -f $bar
-        Write-Host ("`r" + $line) -ForegroundColor Cyan
-        Write-Log -Level "PROGRESS" -Message "QBT_STARTUP=100"
-        Write-Host ""
-    } else {
-        Write-Host ""
-        Write-Warn "qBittorrent Web UI 启动超时（$webUiWaitTimeoutSec 秒），将切换为非 API 模式"
-        Write-Host "  仍会自动打开 torrent，但无法自动监控 100% 进度" -ForegroundColor Yellow
-        $useQbtApi = $false
-    }
-}
-
-if ($useQbtApi -and (Test-QbtWebUI)) {
-    Write-OK "qBittorrent Web UI 已就绪（端口 $QbtPort）"
-} else {
-    $useQbtApi = $false
-    Write-Warn "未检测到可用的 qBittorrent Web UI，将使用非 API 模式"
-}
 
 # ── 步骤 5：连接 API ───────────────────────────────────────────────────────────
 Write-Step "步骤 5/7：连接 qBittorrent API"
 
-if ($useQbtApi) {
+if ($alreadyReady -and $qbtRunning -and (Test-QbtWebUI)) {
+    # 最快路径：qBittorrent 已在运行且 Web UI 就绪，直接连接
+    Write-OK "qBittorrent Web UI 已就绪（端口 $QbtPort）"
     $connected = Connect-Qbt
+    if ($connected) { $useQbtApi = $true }
 } else {
-    $connected = $false
-}
+    # 需要启动 qBittorrent：立刻打开 torrent，同时后台等待 Web UI
+    Write-Step "启动 qBittorrent 并打开 torrent..."
+    Open-TorrentInQBittorrent -QbtExe $qbtExe -TorrentPath $TorrentFile -SavePath $DownloadPath
+    $script:TorrentAlreadyOpened = $true
 
-if ($useQbtApi -and -not $connected) {
-    Write-Host ""
-    Write-Host "  提示：qBittorrent → 工具 → 选项 → Web UI" -ForegroundColor Yellow
-    Write-Host "       勾选「启用 Web 用户界面（远程控制）」" -ForegroundColor Yellow
-    Write-Host "       默认用户名 admin，密码 adminadmin" -ForegroundColor Yellow
-    Write-Host ""
-    $script:QbtPass = Read-UserInput -Prompt "  请输入 qBittorrent Web UI 密码（默认 adminadmin）" -Default "adminadmin"
-    if (-not $script:QbtPass) { $script:QbtPass = "adminadmin" }
-    $connected = Connect-Qbt
-    if (-not $connected) {
-        Write-Warn "连接失败，将切换为非 API 模式（仍会自动打开 torrent）"
-        $useQbtApi = $false
+    Write-Log -Level "PROGRESS" -Message "QBT_STARTUP=5"
+    $waited  = 0
+    $pollSec = 2
+    while (-not (Test-QbtWebUI)) {
+        Start-Sleep -Seconds $pollSec
+        $waited += $pollSec
+        if ($waited -ge $webUiWaitTimeoutSec) { break }
+        $pct = [int]([math]::Min(5 + $waited * 90 / $webUiWaitTimeoutSec, 99))
+        Write-Log -Level "PROGRESS" -Message ("QBT_STARTUP={0}" -f $pct)
+    }
+
+    if (Test-QbtWebUI) {
+        Write-Log -Level "PROGRESS" -Message "QBT_STARTUP=100"
+        Write-OK "qBittorrent Web UI 已就绪（端口 $QbtPort）"
+        $connected = Connect-Qbt
+        if ($connected) { $useQbtApi = $true }
+    } else {
+        Write-Warn "qBittorrent Web UI 未响应，使用非 API 模式监控进度"
     }
 }
 
 if (-not $useQbtApi) {
     Write-Step "步骤 6/7：以非 API 模式打开 Torrent"
-    Write-Host "  文件：$TorrentFile"
-    Write-Host "  保存：$DownloadPath"
 
-    $opened = Open-TorrentInQBittorrent -QbtExe $qbtExe -TorrentPath $TorrentFile -SavePath $DownloadPath
-    if (-not $opened) {
-        Pause-IfConsole "`n按 Enter 退出"
-        exit 1
+    if (-not $script:TorrentAlreadyOpened) {
+        Write-Host "  文件：$TorrentFile"
+        Write-Host "  保存：$DownloadPath"
+        $opened = Open-TorrentInQBittorrent -QbtExe $qbtExe -TorrentPath $TorrentFile -SavePath $DownloadPath
+        if (-not $opened) {
+            Pause-IfConsole "`n按 Enter 退出"
+            exit 1
+        }
     }
 
     Write-Host ""

@@ -447,7 +447,8 @@ function Show-RunMonitor {
                                 # 进度条单向递增，不回退，不重置
                                 if ($v -gt $bar.Value) { $bar.Value = $v }
                                 $lblPct.Text = "$($bar.Value)%"
-                                $lbl.Text = "状态：正在打开并解析 torrent 种子文件（约 10-60 秒）..."
+                                $elapsedSec = [int]($v * 60 / 100)
+                                $lbl.Text = "状态：正在启动 qBittorrent（已等待 $elapsedSec 秒，最多 60 秒）..."
                             }
 
                             if ($l -match '\[PROGRESS\]\s*TORRENT=([0-9]+(\.[0-9]+)?)') {
@@ -470,6 +471,19 @@ function Show-RunMonitor {
                                         $btnLaunchNow.Enabled = $true
                                     }
                                 }
+                            }
+
+                            if ($l -match '\[INFO\]\s*SEEDING_LAUNCH_READY=(.+)') {
+                                $launchPath = $matches[1].Trim()
+                                $bar.Value = 100
+                                $lblPct.Text = '100%'
+                                $lbl.Text = '状态：检测到下载完成（Seeding），安装器即将启动'
+                                [System.Windows.Forms.MessageBox]::Show(
+                                    "检测到下载已完成（Seeding）。`n安装器将在 3 秒后自动启动，请做好准备。`n`n路径：$launchPath",
+                                    'RBR 安装助手',
+                                    [System.Windows.Forms.MessageBoxButtons]::OK,
+                                    [System.Windows.Forms.MessageBoxIcon]::Information
+                                ) | Out-Null
                             }
 
                             if ($l -match '已启动安装器：') {
