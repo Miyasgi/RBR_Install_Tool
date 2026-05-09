@@ -216,7 +216,7 @@ if (Test-Path $vswhere) {
 
 $csc = $cscCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $csc) {
-    throw "未找到 csc.exe，无法构建 EXE。已搜索路径：$($cscCandidates -join ', ')"
+    throw "csc.exe not found. Searched: $($cscCandidates -join ', ')"
 }
 
 $tmpCs = Join-Path $distDir "__rbr_launcher_tmp.cs"
@@ -237,7 +237,7 @@ try {
 
     & $csc @args
     if ($LASTEXITCODE -ne 0) {
-        throw "csc 编译失败，退出码：$LASTEXITCODE"
+        throw "csc compilation failed with exit code: $LASTEXITCODE"
     }
 }
 finally {
@@ -246,10 +246,10 @@ finally {
 
 Copy-Item -Path $outExe -Destination $distExe -Force
 
-Write-Host "EXE 构建完成：$outExe" -ForegroundColor Green
-Write-Host "已同步到：$distExe" -ForegroundColor Green
+Write-Host "EXE built: $outExe" -ForegroundColor Green
+Write-Host "Synced to: $distExe" -ForegroundColor Green
 if ($iconForExe) {
-    Write-Host "已嵌入图标：$iconForExe" -ForegroundColor Green
+    Write-Host "Icon embedded: $iconForExe" -ForegroundColor Green
 } else {
-    Write-Host "未找到图标文件（RBR_INSTALLER.png / RBR_INSTALLER.ico），使用默认图标。" -ForegroundColor Yellow
+    Write-Host "Icon not found (RBR_INSTALLER.png / RBR_INSTALLER.ico), using default." -ForegroundColor Yellow
 }

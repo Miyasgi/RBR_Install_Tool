@@ -15,7 +15,7 @@ jobs:
 
       - name: Build launcher EXE
         shell: pwsh
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\Build_LauncherExe.ps1
+        run: .\tools\Build_LauncherExe.ps1
 
       - name: Package release ZIP
         shell: pwsh
