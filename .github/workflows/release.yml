@@ -50,8 +50,7 @@ jobs:
           Compress-Archive -Path $include -DestinationPath $zipName
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.ver.outputs.value }}
-          files: RBR_Install_Tool_*.zip
-          generate_release_notes: true
+        shell: pwsh
+        run: gh release create ${{ steps.ver.outputs.value }} RBR_Install_Tool_*.zip --generate-notes --title ${{ steps.ver.outputs.value }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
