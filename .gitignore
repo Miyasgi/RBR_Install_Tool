@@ -1,0 +1,9 @@
+# Local build output
+release/
+
+# Claude Code local config
+.claude/
+
+# Runtime cache
+qbt_path.cache
+logs/
