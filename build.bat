@@ -19,18 +19,18 @@ echo   RBR Release Build (ZIP)
 echo ==============================================
 echo.
 
-if not exist "%ROOT%\RBR_Install_Assistant.exe" (
-    echo [提示] 未找到 RBR_Install_Assistant.exe，先自动构建...
-    if exist "%ROOT%\tools\Build_LauncherExe.ps1" (
-        powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\tools\Build_LauncherExe.ps1"
-        if errorlevel 1 (
-            echo [错误] EXE 构建失败，已中止。
-            exit /b 1
-        )
-    ) else (
-        echo [错误] 缺少 tools\Build_LauncherExe.ps1，无法自动构建 EXE。
+if exist "%ROOT%\tools\Build_LauncherExe.ps1" (
+    echo [0/4] 重新编译 EXE...
+    if exist "%ROOT%\RBR_Install_Assistant.exe" del /f /q "%ROOT%\RBR_Install_Assistant.exe"
+    if exist "%ROOT%\dist\RBR_Install_Assistant.exe" del /f /q "%ROOT%\dist\RBR_Install_Assistant.exe"
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\tools\Build_LauncherExe.ps1"
+    if errorlevel 1 (
+        echo [错误] EXE 构建失败，已中止。
         exit /b 1
     )
+) else (
+    echo [错误] 缺少 tools\Build_LauncherExe.ps1，无法构建 EXE。
+    exit /b 1
 )
 
 if not exist "%OUT_DIR%" mkdir "%OUT_DIR%"

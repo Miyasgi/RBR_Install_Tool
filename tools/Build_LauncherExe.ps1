@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 [CmdletBinding()]
 param()
 
@@ -105,7 +105,7 @@ function Ensure-ExeIcon {
 
 $iconForExe = Ensure-ExeIcon -PngPath $logoPng -IcoPath $logoIco
 
-$code = @"
+$code = @'
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -139,58 +139,37 @@ public static class RbrLauncher
         if (!File.Exists(target))
         {
             MessageBox.Show(
-                "找不到启动脚本。请确认包含 scripts 文件夹，且其中有 RBR_UI_Launcher.ps1 或 RBR_Auto_Installer.ps1。",
-                "RBR 安装助手",
+                "Script not found. Ensure the scripts folder contains RBR_UI_Launcher.ps1.",
+                "RBR Install Assistant",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error
             );
             return;
         }
 
-        string args = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"" + target + "\"";
+        string psArgs = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File " + (char)34 + target + (char)34;
 
         try
         {
-            var psi = new ProcessStartInfo("powershell.exe", args)
+            var psi = new ProcessStartInfo("powershell.exe", psArgs)
             {
-                UseShellExecute = true,
-                Verb = "runas",
-                WindowStyle = ProcessWindowStyle.Hidden
+                UseShellExecute = false,
+                CreateNoWindow = true
             };
             Process.Start(psi);
-        }
-        catch (System.ComponentModel.Win32Exception ex)
-        {
-            if (ex.NativeErrorCode == 1223)
-            {
-                MessageBox.Show(
-                    "你取消了管理员授权（UAC）。请重新打开并点击“是”。",
-                    "RBR 安装助手",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning
-                );
-                return;
-            }
-
-            MessageBox.Show(
-                "启动失败：" + ex.Message,
-                "RBR 安装助手",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error
-            );
         }
         catch (Exception ex)
         {
             MessageBox.Show(
-                "启动失败：" + ex.Message,
-                "RBR 安装助手",
+                "Launch failed: " + ex.Message,
+                "RBR Install Assistant",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error
             );
         }
     }
 }
-"@
+'@
 
 if (Test-Path $outExe) {
     Remove-Item -Path $outExe -Force
@@ -222,26 +201,48 @@ if (-not $csc) {
 $tmpCs = Join-Path $distDir "__rbr_launcher_tmp.cs"
 Set-Content -Path $tmpCs -Value $code -Encoding UTF8
 
+$tmpManifest = Join-Path $distDir "__rbr_launcher_tmp.manifest"
+$manifestContent = @"
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
+    <security>
+      <requestedPrivileges>
+        <requestedExecutionLevel level="asInvoker" uiAccess="false"/>
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"/>
+    </application>
+  </compatibility>
+</assembly>
+"@
+Set-Content -Path $tmpManifest -Value $manifestContent -Encoding UTF8
+
 try {
-    $args = @(
+    $cscArgs = @(
         "/nologo",
         "/target:winexe",
         "/out:$outExe",
         "/reference:System.dll",
-        "/reference:System.Windows.Forms.dll"
+        "/reference:System.Windows.Forms.dll",
+        "/win32manifest:$tmpManifest"
     )
     if ($iconForExe) {
-        $args += "/win32icon:$iconForExe"
+        $cscArgs += "/win32icon:$iconForExe"
     }
-    $args += $tmpCs
+    $cscArgs += $tmpCs
 
-    & $csc @args
+    & $csc @cscArgs
     if ($LASTEXITCODE -ne 0) {
         throw "csc compilation failed with exit code: $LASTEXITCODE"
     }
 }
 finally {
     if (Test-Path $tmpCs) { Remove-Item -Path $tmpCs -Force -ErrorAction SilentlyContinue }
+    if (Test-Path $tmpManifest) { Remove-Item -Path $tmpManifest -Force -ErrorAction SilentlyContinue }
 }
 
 Copy-Item -Path $outExe -Destination $distExe -Force

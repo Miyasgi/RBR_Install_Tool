@@ -1,4 +1,13 @@
 #Requires -Version 5.1
+
+$script:StartupLog = Join-Path $env:TEMP 'RBR_Installer_startup.log'
+function Write-StartupLog ($Msg) {
+    try { Add-Content -Path $script:StartupLog -Value "$(Get-Date -Format 'HH:mm:ss') $Msg" -Encoding UTF8 -ErrorAction SilentlyContinue } catch {}
+}
+Write-StartupLog '=== RBR UI Launcher startup ==='
+
+try {
+
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
@@ -222,11 +231,7 @@ function Start-BackendProcess {
         throw "检测到后台任务已在运行，请等待当前任务结束后再继续。"
     }
 
-    if (Test-IsAdministrator) {
-        return Start-Process -FilePath "powershell.exe" -ArgumentList $Arguments -WindowStyle Hidden -PassThru
-    }
-
-    return Start-Process -FilePath "powershell.exe" -ArgumentList $Arguments -WindowStyle Hidden -Verb RunAs -PassThru
+    return Start-Process -FilePath "powershell.exe" -ArgumentList $Arguments -WindowStyle Hidden -PassThru
 }
 
 function Get-DefaultDownloadPath {
@@ -1143,4 +1148,24 @@ $cmbLang.Add_SelectedIndexChanged({
     Apply-MainFormLanguage
 })
 
+Write-StartupLog 'Form ready, calling ShowDialog'
 [void]$form.ShowDialog()
+
+} catch {
+    Write-StartupLog "FATAL: $_`n$($_.ScriptStackTrace)"
+    try {
+        [System.Windows.Forms.MessageBox]::Show(
+            "$(T 'form.title') 启动失败，错误已记录到：`n$script:StartupLog`n`n$_",
+            'RBR 安装助手',
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Error
+        ) | Out-Null
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show(
+            "Startup failed. Log: $script:StartupLog`n`n$_",
+            'RBR Install Assistant',
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Error
+        ) | Out-Null
+    }
+}
