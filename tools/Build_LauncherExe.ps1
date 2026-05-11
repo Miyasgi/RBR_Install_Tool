@@ -147,14 +147,17 @@ public static class RbrLauncher
             return;
         }
 
-        string psArgs = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File " + (char)34 + target + (char)34;
+        string scriptDir  = Path.GetDirectoryName(target);
+        string scriptFile = Path.GetFileName(target);
+        string psArgs = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File " + (char)34 + scriptFile + (char)34;
 
         try
         {
             var psi = new ProcessStartInfo("powershell.exe", psArgs)
             {
-                UseShellExecute = false,
-                CreateNoWindow = true
+                UseShellExecute  = false,
+                CreateNoWindow   = true,
+                WorkingDirectory = scriptDir
             };
             Process.Start(psi);
         }

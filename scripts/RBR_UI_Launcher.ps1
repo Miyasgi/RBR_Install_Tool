@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 
 $script:StartupLog = Join-Path $env:TEMP 'RBR_Installer_startup.log'
 function Write-StartupLog ($Msg) {
