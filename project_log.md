@@ -400,6 +400,76 @@ scripts/RBR_UI_Launcher.ps1:
 4. Check if Web UI connects faster (SavePath fix should eliminate needless restarts).
 5. Check if installer launches when already at Seeding state.
 
+## 17) Session Update (2026-05-10) — 中文系统兼容性大修
+
+### 17.1 背景
+
+用户反馈：发布给朋友使用后，出现两类问题：
+1. 允许 SmartScreen 后没反应、UI 不弹出
+2. 中文 Win10/Win11 系统完全无法使用
+
+### 17.2 问题一：UAC 弹窗不可见
+
+**根因：**
+EXE 本身没有请求管理员权限的 manifest，但在代码里用 `Verb = "runas"` 让 PowerShell 以管理员启动。这个 UAC 弹窗是异步的——EXE 自己立刻退出，UAC 孤立在后台任务栏闪烁，用户看不见，PowerShell 从未启动，UI 永远不出现。
+
+**修复：**
+- `Build_LauncherExe.ps1`：给 EXE 嵌入 UAC manifest，`requestedExecutionLevel = asInvoker`（工具本身不需要管理员权限）
+- `RBR_UI_Launcher.ps1`：`Start-BackendProcess` 去掉 `Verb RunAs`，直接以当前权限启动后端
+- 安装器本身（`Rallysimfans_Installer.exe`）运行时会自己弹 UAC
+
+### 17.3 问题二：中文路径下 PowerShell 无法启动脚本
+
+**根因 A：ShellExecute ANSI 编码问题**
+EXE 原来用 `UseShellExecute = true` 启动 PowerShell，ShellExecuteEx 走 ANSI 接口，中文路径字节被截断或损坏，PowerShell 找不到脚本文件，静默退出，无任何日志。
+
+**修复 A：**
+- 改为 `UseShellExecute = false` + `CreateNoWindow = true`，走 `CreateProcess` Unicode 接口
+- 进一步改用 `WorkingDirectory = scriptDir`，只传文件名给 `-File`，彻底避免中文出现在命令行参数里
+
+**根因 B（真正根因）：PS1 脚本 UTF-8 无 BOM**
+中文 Windows 系统的 PowerShell 5.1 默认用系统 ANSI 编码（GBK/CP936）读取脚本。脚本保存为 UTF-8 无 BOM，系统读取时将 UTF-8 字节当 GBK 解析，中文字符串全部乱码，PowerShell 在解析阶段就报语法错误退出，一行代码都不会执行（包括启动日志）。
+
+症状截图：`'lbl.torrent' = 'Torrent 鏂囦欢锛?` — 典型 UTF-8 被 GBK 误读的乱码。
+
+**修复 B：**
+- 给 `scripts/RBR_UI_Launcher.ps1` 和 `scripts/RBR_Auto_Installer.ps1` 都加上 UTF-8 BOM（EF BB BF）
+- PowerShell 看到 BOM 后不论系统语言设置，都会用 UTF-8 读取脚本
+
+### 17.4 其他改进
+
+**启动崩溃日志：**
+- `RBR_UI_Launcher.ps1` 顶部加了 `try { ... } catch { }` 包裹全脚本
+- 任何启动失败写入 `%TEMP%\RBR_Installer_startup.log`（路径永远可写）
+- 如果 WinForms 已加载，额外弹 MessageBox 告知日志位置
+
+**build.bat 优化：**
+- 原来只在 EXE 不存在时才重新编译，每次打包可能带入旧版 EXE
+- 改为每次都强制删旧 EXE 重新编译再打包
+
+**csc 编译修复：**
+- 发现 Edit 工具写入 C# 代码时会将直引号替换为 Unicode 弯引号（U+201C/201D），导致 csc.exe 报 CS1056
+- 将 `$code` 从双引号 here-string（`@"..."@`）改为单引号 here-string（`@'...'@`），避免 PowerShell 字符处理
+- 同时用 PowerShell 批量替换文件内残留弯引号
+
+**工程改进：**
+- 添加 `.gitignore`：排除 `release/`、`.claude/`、`logs/`、`qbt_path.cache`
+- CI build.yml 打包方式验证正常
+
+### 17.5 发布历史
+
+| 版本 | 说明 |
+|------|------|
+| v1.0.6 | 修复 UAC 不可见、去掉 RunAs、改 CreateProcess |
+| v1.0.7（CI 中） | 加 UTF-8 BOM，修复中文系统 GBK 解析崩溃（根本原因） |
+
+### 17.6 经验教训
+
+1. PowerShell 5.1 在非英文系统上读取无 BOM 的 UTF-8 文件会用系统 ANSI 编码，导致乱码崩溃。**所有 PS1 脚本必须带 UTF-8 BOM。**
+2. ShellExecuteEx 走 ANSI 接口，中文路径有风险。用 CreateProcess（`UseShellExecute = false`）+ `WorkingDirectory` 更可靠。
+3. 工具本身不需要管理员权限时，不要用 `requireAdministrator` manifest，用 `asInvoker` 直接运行，避免 UAC 干扰用户体验。
+4. 如果脚本完全没有输出/日志，优先怀疑 PowerShell 解析阶段就失败了（语法/编码问题），而不是运行时错误。
+
 ## 16) Session Update (2026-05-09)
 
 ### 16.1 Confirmed working
