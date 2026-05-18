@@ -39,6 +39,7 @@ $runtimeLogPath = Join-Path $logDir "RBR_Auto_Installer.log"
 $jsGameDir    = Join-Path $projectRoot 'JSGAME'
 $jsgmeExeName = 'JSGME MOD MANAGER.exe'
 # Fill in the Baidu Netdisk URL for the MODS pack before distributing:
+$script:ModsGithubUrl   = 'https://github.com/Miyasgi/RBR_Install_Tool/releases/download/v2.0.1/RBR_MODS.zip'
 $script:ModsBaiduUrl    = 'https://pan.baidu.com/s/1ZiGbMfBat1Ok0I6nAU8Jxg?pwd=fxme'
 
 $script:AppIcon = $null
@@ -125,9 +126,10 @@ $script:Strings = @{
         'mod.jsgme.status.none'  = 'JSGME 状态：未部署到游戏目录'
         'mod.jsgme.status.ok'    = 'JSGME 状态：已就绪 (可直接打开)'
         'mod.step1.title'        = '第一步：获取 MOD 插件集合包'
-        'mod.step1.note'         = '已有文件可直接本地导入（文件夹或 ZIP）；若需下载，点【百度网盘下载】。'
+        'mod.step1.note'         = '已有文件可直接本地导入；若需下载：优先 GitHub，无法访问再用百度网盘。'
         'mod.btn.importfolder'   = '本地导入（文件夹）'
         'mod.btn.importzip'      = '本地导入（ZIP）'
+        'mod.btn.githubdl'       = 'GitHub 下载'
         'mod.btn.baidudl'        = '百度网盘下载'
         'mod.import.status'      = '导入状态：等待'
         'mod.import.doing'       = '导入状态：正在复制，请稍候...'
@@ -231,9 +233,10 @@ $script:Strings = @{
         'mod.jsgme.status.none'  = 'JSGME status: not deployed to game folder'
         'mod.jsgme.status.ok'    = 'JSGME status: ready (can open now)'
         'mod.step1.title'        = 'Step 1: Get MOD pack'
-        'mod.step1.note'         = 'Have the files? Import locally (folder or ZIP). Need to download? Click [Baidu Netdisk].'
+        'mod.step1.note'         = 'Have the files? Import locally. Need to download? Try GitHub first; use Baidu if GitHub is inaccessible.'
         'mod.btn.importfolder'   = 'Import folder'
         'mod.btn.importzip'      = 'Import ZIP'
+        'mod.btn.githubdl'       = 'GitHub Download'
         'mod.btn.baidudl'        = 'Baidu Netdisk'
         'mod.import.status'      = 'Import: waiting'
         'mod.import.doing'       = 'Import: copying, please wait...'
@@ -1128,7 +1131,7 @@ $tabPage2.Controls.Add($lblModStep1Note)
 $btnModImportFolder = New-Object System.Windows.Forms.Button
 $btnModImportFolder.Text     = (T 'mod.btn.importfolder')
 $btnModImportFolder.Location = New-Object System.Drawing.Point(28, 156)
-$btnModImportFolder.Size     = New-Object System.Drawing.Size(155, 30)
+$btnModImportFolder.Size     = New-Object System.Drawing.Size(138, 30)
 $btnModImportFolder.Add_Click({
     $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
     $dlg.Description = (T 'mod.dlg.folder')
@@ -1152,8 +1155,8 @@ $tabPage2.Controls.Add($btnModImportFolder)
 
 $btnModImportZip = New-Object System.Windows.Forms.Button
 $btnModImportZip.Text     = (T 'mod.btn.importzip')
-$btnModImportZip.Location = New-Object System.Drawing.Point(191, 156)
-$btnModImportZip.Size     = New-Object System.Drawing.Size(130, 30)
+$btnModImportZip.Location = New-Object System.Drawing.Point(174, 156)
+$btnModImportZip.Size     = New-Object System.Drawing.Size(116, 30)
 $btnModImportZip.Add_Click({
     $dlg = New-Object System.Windows.Forms.OpenFileDialog
     $dlg.Title           = (T 'mod.dlg.zip')
@@ -1176,10 +1179,23 @@ $btnModImportZip.Add_Click({
 })
 $tabPage2.Controls.Add($btnModImportZip)
 
+$btnModGithubDl = New-Object System.Windows.Forms.Button
+$btnModGithubDl.Text     = (T 'mod.btn.githubdl')
+$btnModGithubDl.Location = New-Object System.Drawing.Point(298, 156)
+$btnModGithubDl.Size     = New-Object System.Drawing.Size(116, 30)
+$btnModGithubDl.Add_Click({
+    try {
+        Start-Process $script:ModsGithubUrl | Out-Null
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("$_", (T 'err.title'), 'OK', 'Warning') | Out-Null
+    }
+})
+$tabPage2.Controls.Add($btnModGithubDl)
+
 $btnModBaiduDl = New-Object System.Windows.Forms.Button
 $btnModBaiduDl.Text     = (T 'mod.btn.baidudl')
-$btnModBaiduDl.Location = New-Object System.Drawing.Point(329, 156)
-$btnModBaiduDl.Size     = New-Object System.Drawing.Size(130, 30)
+$btnModBaiduDl.Location = New-Object System.Drawing.Point(422, 156)
+$btnModBaiduDl.Size     = New-Object System.Drawing.Size(116, 30)
 $btnModBaiduDl.Add_Click({
     if ([string]::IsNullOrWhiteSpace($script:ModsBaiduUrl)) {
         [System.Windows.Forms.MessageBox]::Show(
@@ -1472,6 +1488,7 @@ function Apply-MainFormLanguage {
     $lblModStep1Note.Text      = (T 'mod.step1.note')
     $btnModImportFolder.Text   = (T 'mod.btn.importfolder')
     $btnModImportZip.Text      = (T 'mod.btn.importzip')
+    $btnModGithubDl.Text       = (T 'mod.btn.githubdl')
     $btnModBaiduDl.Text        = (T 'mod.btn.baidudl')
     $lblModStep2.Text      = (T 'mod.step2.title')
     $btnModInstall.Text    = (T 'mod.btn.install')
