@@ -36,6 +36,11 @@ if (-not (Test-Path $logDir)) {
 }
 $runtimeLogPath = Join-Path $logDir "RBR_Auto_Installer.log"
 
+$jsGameDir    = Join-Path $projectRoot 'JSGAME'
+$jsgmeExeName = 'JSGME MOD MANAGER.exe'
+# Fill in the Baidu Netdisk URL for the MODS pack before distributing:
+$script:ModsBaiduUrl    = 'https://pan.baidu.com/s/1ZiGbMfBat1Ok0I6nAU8Jxg?pwd=fxme'
+
 $script:AppIcon = $null
 $script:LangCode = 'zh'
 
@@ -113,6 +118,38 @@ $script:Strings = @{
         'mon.popup.seeding.title'= 'RBR 安装助手'
         'err.noexe'              = '找不到 RBR_Auto_Installer.ps1，请确认文件完整。'
         'err.title'              = '错误'
+        'tab.install'            = '游戏安装'
+        'tab.mod'                = 'MOD 管理器'
+        'mod.warn'               = '[!]  请先在【游戏安装】页完成游戏安装，再使用 MOD 管理器'
+        'mod.lbl.root'           = '游戏根目录：'
+        'mod.jsgme.status.none'  = 'JSGME 状态：未部署到游戏目录'
+        'mod.jsgme.status.ok'    = 'JSGME 状态：已就绪 (可直接打开)'
+        'mod.step1.title'        = '第一步：获取 MOD 插件集合包'
+        'mod.step1.note'         = '已有文件可直接本地导入（文件夹或 ZIP）；若需下载，点【百度网盘下载】。'
+        'mod.btn.importfolder'   = '本地导入（文件夹）'
+        'mod.btn.importzip'      = '本地导入（ZIP）'
+        'mod.btn.baidudl'        = '百度网盘下载'
+        'mod.import.status'      = '导入状态：等待'
+        'mod.import.doing'       = '导入状态：正在复制，请稍候...'
+        'mod.import.done'        = '导入状态：成功'
+        'mod.import.err'         = '导入状态：失败 — {0}'
+        'mod.dlg.folder'         = '选择 MOD 插件集合包 文件夹'
+        'mod.dlg.zip'            = '选择 MOD 压缩包 (.zip)'
+        'mod.dlg.zip.filter'     = 'ZIP 压缩包 (*.zip)|*.zip|所有文件 (*.*)|*.*'
+        'mod.err.nobaiduurl'     = 'MOD 包下载链接暂未配置，请联系发布者获取。'
+        'mod.step2.title'        = '第二步：将 JSGME 工具部署到游戏目录'
+        'mod.btn.install'        = '一键部署 MOD 管理器'
+        'mod.install.status'     = '状态：等待操作'
+        'mod.install.doing'      = '状态：正在复制文件...'
+        'mod.install.done'       = '状态：已成功部署到游戏目录'
+        'mod.install.err'        = '状态：复制失败 — {0}'
+        'mod.step3.title'        = '第三步：在 JSGME 中勾选并启用 MOD'
+        'mod.btn.open'           = '打开 MOD 管理器 (JSGME)'
+        'mod.err.noroot'         = '请先输入或确认游戏根目录路径。'
+        'mod.err.nojsgame'       = "找不到 JSGME 工具文件，请确认 JSGAME 目录存在。`n预期路径：{0}"
+        'mod.err.noexe'          = '游戏目录中未找到 JSGME，请先完成第二步部署。'
+        'mod.err.launch'         = '启动 JSGME 失败：{0}'
+        'mod.err.nodlurl'        = 'MOD 包下载链接暂未配置，请联系发布者获取下载地址。'
     }
     en = @{
         'form.title'             = 'RBR Installer Assistant'
@@ -187,6 +224,38 @@ $script:Strings = @{
         'mon.popup.seeding.title'= 'RBR Installer Assistant'
         'err.noexe'              = 'RBR_Auto_Installer.ps1 not found. Please verify file integrity.'
         'err.title'              = 'Error'
+        'tab.install'            = 'Install Game'
+        'tab.mod'                = 'MOD Manager'
+        'mod.warn'               = '[!]  Complete game installation (Install Game tab) before using MOD Manager'
+        'mod.lbl.root'           = 'Game root folder:'
+        'mod.jsgme.status.none'  = 'JSGME status: not deployed to game folder'
+        'mod.jsgme.status.ok'    = 'JSGME status: ready (can open now)'
+        'mod.step1.title'        = 'Step 1: Get MOD pack'
+        'mod.step1.note'         = 'Have the files? Import locally (folder or ZIP). Need to download? Click [Baidu Netdisk].'
+        'mod.btn.importfolder'   = 'Import folder'
+        'mod.btn.importzip'      = 'Import ZIP'
+        'mod.btn.baidudl'        = 'Baidu Netdisk'
+        'mod.import.status'      = 'Import: waiting'
+        'mod.import.doing'       = 'Import: copying, please wait...'
+        'mod.import.done'        = 'Import: done'
+        'mod.import.err'         = 'Import: failed — {0}'
+        'mod.dlg.folder'         = 'Select MOD pack folder'
+        'mod.dlg.zip'            = 'Select MOD archive (.zip)'
+        'mod.dlg.zip.filter'     = 'ZIP archive (*.zip)|*.zip|All files (*.*)|*.*'
+        'mod.err.nobaiduurl'     = 'MOD pack download link not configured. Please contact the publisher.'
+        'mod.step2.title'        = 'Step 2: Deploy JSGME tool to game folder'
+        'mod.btn.install'        = 'Deploy MOD Manager'
+        'mod.install.status'     = 'Status: ready'
+        'mod.install.doing'      = 'Status: copying files...'
+        'mod.install.done'       = 'Status: deployed to game folder successfully'
+        'mod.install.err'        = 'Status: copy failed — {0}'
+        'mod.step3.title'        = 'Step 3: Check and enable MODs in JSGME'
+        'mod.btn.open'           = 'Open MOD Manager (JSGME)'
+        'mod.err.noroot'         = 'Please enter or confirm the game root folder path.'
+        'mod.err.nojsgame'       = "JSGME tool files not found. Make sure JSGAME folder exists.`nExpected: {0}"
+        'mod.err.noexe'          = 'JSGME not found in game folder. Please complete Step 2 first.'
+        'mod.err.launch'         = 'Failed to launch JSGME: {0}'
+        'mod.err.nodlurl'        = 'MOD pack download link not configured. Please contact the publisher for the download URL.'
     }
 }
 
@@ -729,12 +798,26 @@ function Show-RunMonitor {
 $form = New-Object System.Windows.Forms.Form
 $form.Text = (T 'form.title')
 $form.StartPosition = "CenterScreen"
-$form.Size = New-Object System.Drawing.Size(780, 370)
+$form.Size = New-Object System.Drawing.Size(780, 450)
 $form.FormBorderStyle = "FixedDialog"
 $form.MaximizeBox = $false
 $form.MinimizeBox = $false
 $icon = Get-AppIcon
 if ($icon) { $form.Icon = $icon }
+
+$tabControl = New-Object System.Windows.Forms.TabControl
+$tabControl.Dock = [System.Windows.Forms.DockStyle]::Fill
+
+$tabPage1 = New-Object System.Windows.Forms.TabPage
+$tabPage1.Text = (T 'tab.install')
+$tabPage1.UseVisualStyleBackColor = $true
+
+$tabPage2 = New-Object System.Windows.Forms.TabPage
+$tabPage2.Text = (T 'tab.mod')
+$tabPage2.UseVisualStyleBackColor = $true
+
+[void]$tabControl.TabPages.Add($tabPage1)
+[void]$tabControl.TabPages.Add($tabPage2)
 
 $cmbLang = New-Object System.Windows.Forms.ComboBox
 $cmbLang.Location = New-Object System.Drawing.Point(620, 8)
@@ -743,7 +826,7 @@ $cmbLang.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
 [void]$cmbLang.Items.Add('中文')
 [void]$cmbLang.Items.Add('EN')
 $cmbLang.SelectedIndex = 0
-$form.Controls.Add($cmbLang)
+$tabPage1.Controls.Add($cmbLang)
 
 if (Test-Path $logoPng) {
     try {
@@ -752,7 +835,7 @@ if (Test-Path $logoPng) {
         $picLogo.Size = New-Object System.Drawing.Size(56, 56)
         $picLogo.SizeMode = [System.Windows.Forms.PictureBoxSizeMode]::Zoom
         $picLogo.Image = [System.Drawing.Image]::FromFile($logoPng)
-        $form.Controls.Add($picLogo)
+        $tabPage1.Controls.Add($picLogo)
     } catch {}
 }
 
@@ -760,18 +843,18 @@ $lblTips = New-Object System.Windows.Forms.Label
 $lblTips.Text = (T 'tips')
 $lblTips.Location = New-Object System.Drawing.Point(20, 18)
 $lblTips.Size = New-Object System.Drawing.Size(730, 24)
-$form.Controls.Add($lblTips)
+$tabPage1.Controls.Add($lblTips)
 
 $lblTorrent = New-Object System.Windows.Forms.Label
 $lblTorrent.Text = (T 'lbl.torrent')
 $lblTorrent.Location = New-Object System.Drawing.Point(20, 60)
 $lblTorrent.Size = New-Object System.Drawing.Size(120, 24)
-$form.Controls.Add($lblTorrent)
+$tabPage1.Controls.Add($lblTorrent)
 
 $txtTorrent = New-Object System.Windows.Forms.TextBox
 $txtTorrent.Location = New-Object System.Drawing.Point(140, 58)
 $txtTorrent.Size = New-Object System.Drawing.Size(520, 24)
-$form.Controls.Add($txtTorrent)
+$tabPage1.Controls.Add($txtTorrent)
 
 $btnTorrent = New-Object System.Windows.Forms.Button
 $btnTorrent.Text = (T 'btn.browse')
@@ -786,18 +869,18 @@ $btnTorrent.Add_Click({
         $txtTorrent.Text = $dlg.FileName
     }
 })
-$form.Controls.Add($btnTorrent)
+$tabPage1.Controls.Add($btnTorrent)
 
 $lblInstaller = New-Object System.Windows.Forms.Label
 $lblInstaller.Text = (T 'lbl.installer')
 $lblInstaller.Location = New-Object System.Drawing.Point(20, 106)
 $lblInstaller.Size = New-Object System.Drawing.Size(120, 24)
-$form.Controls.Add($lblInstaller)
+$tabPage1.Controls.Add($lblInstaller)
 
 $txtInstaller = New-Object System.Windows.Forms.TextBox
 $txtInstaller.Location = New-Object System.Drawing.Point(140, 104)
 $txtInstaller.Size = New-Object System.Drawing.Size(520, 24)
-$form.Controls.Add($txtInstaller)
+$tabPage1.Controls.Add($txtInstaller)
 
 $btnInstaller = New-Object System.Windows.Forms.Button
 $btnInstaller.Text = (T 'btn.browse')
@@ -812,30 +895,30 @@ $btnInstaller.Add_Click({
         $txtInstaller.Text = $dlg.FileName
     }
 })
-$form.Controls.Add($btnInstaller)
+$tabPage1.Controls.Add($btnInstaller)
 
 $lblDownload = New-Object System.Windows.Forms.Label
 $lblDownload.Text = (T 'lbl.drive')
 $lblDownload.Location = New-Object System.Drawing.Point(20, 152)
 $lblDownload.Size = New-Object System.Drawing.Size(120, 24)
-$form.Controls.Add($lblDownload)
+$tabPage1.Controls.Add($lblDownload)
 
 $cmbDrive = New-Object System.Windows.Forms.ComboBox
 $cmbDrive.Location = New-Object System.Drawing.Point(140, 150)
 $cmbDrive.Size = New-Object System.Drawing.Size(95, 24)
 $cmbDrive.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
-$form.Controls.Add($cmbDrive)
+$tabPage1.Controls.Add($cmbDrive)
 
 $lblDownloadPath = New-Object System.Windows.Forms.Label
 $lblDownloadPath.Text = (T 'lbl.path')
 $lblDownloadPath.Location = New-Object System.Drawing.Point(245, 152)
 $lblDownloadPath.Size = New-Object System.Drawing.Size(70, 24)
-$form.Controls.Add($lblDownloadPath)
+$tabPage1.Controls.Add($lblDownloadPath)
 
 $txtDownload = New-Object System.Windows.Forms.TextBox
 $txtDownload.Location = New-Object System.Drawing.Point(315, 150)
 $txtDownload.Size = New-Object System.Drawing.Size(345, 24)
-$form.Controls.Add($txtDownload)
+$tabPage1.Controls.Add($txtDownload)
 
 $btnDownload = New-Object System.Windows.Forms.Button
 $btnDownload.Text = (T 'btn.browse')
@@ -853,14 +936,14 @@ $btnDownload.Add_Click({
         $txtDownload.Text = $dlg.SelectedPath
     }
 })
-$form.Controls.Add($btnDownload)
+$tabPage1.Controls.Add($btnDownload)
 
 $lblDriveHint = New-Object System.Windows.Forms.Label
 $lblDriveHint.Text = (T 'drive.none')
 $lblDriveHint.Location = New-Object System.Drawing.Point(140, 176)
 $lblDriveHint.Size = New-Object System.Drawing.Size(610, 18)
 $lblDriveHint.ForeColor = [System.Drawing.Color]::DarkBlue
-$form.Controls.Add($lblDriveHint)
+$tabPage1.Controls.Add($lblDriveHint)
 
 $txtDownload.Add_TextChanged({
     $lblDriveHint.Text = Get-DriveHintText -Path $txtDownload.Text.Trim()
@@ -907,13 +990,13 @@ $lblNote = New-Object System.Windows.Forms.Label
 $lblNote.Text = (T 'lbl.note1')
 $lblNote.Location = New-Object System.Drawing.Point(20, 198)
 $lblNote.Size = New-Object System.Drawing.Size(730, 24)
-$form.Controls.Add($lblNote)
+$tabPage1.Controls.Add($lblNote)
 
 $lblNote2 = New-Object System.Windows.Forms.Label
 $lblNote2.Text = (T 'lbl.note2')
 $lblNote2.Location = New-Object System.Drawing.Point(20, 222)
 $lblNote2.Size = New-Object System.Drawing.Size(730, 24)
-$form.Controls.Add($lblNote2)
+$tabPage1.Controls.Add($lblNote2)
 
 $btnOfficial = New-Object System.Windows.Forms.Button
 $btnOfficial.Text = (T 'btn.official')
@@ -926,14 +1009,14 @@ $btnOfficial.Add_Click({
         [System.Windows.Forms.MessageBox]::Show((T 'dlg.official.fail' $officialUrl), (T 'mon.popup.seeding.title'), "OK", "Warning") | Out-Null
     }
 })
-$form.Controls.Add($btnOfficial)
+$tabPage1.Controls.Add($btnOfficial)
 
 $btnAutoDownload = New-Object System.Windows.Forms.Button
 $btnAutoDownload.Text = (T 'btn.auto')
 $btnAutoDownload.Location = New-Object System.Drawing.Point(150, 270)
 $btnAutoDownload.Size = New-Object System.Drawing.Size(250, 34)
 $btnAutoDownload.Font = New-Object System.Drawing.Font($form.Font, [System.Drawing.FontStyle]::Bold)
-$form.Controls.Add($btnAutoDownload)
+$tabPage1.Controls.Add($btnAutoDownload)
 
 $lblRecommend = New-Object System.Windows.Forms.Label
 $lblRecommend.Text = (T 'lbl.recommend')
@@ -941,26 +1024,264 @@ $lblRecommend.Location = New-Object System.Drawing.Point(150, 246)
 $lblRecommend.Size = New-Object System.Drawing.Size(350, 22)
 $lblRecommend.ForeColor = [System.Drawing.Color]::DarkRed
 $lblRecommend.Font = New-Object System.Drawing.Font($form.Font, [System.Drawing.FontStyle]::Bold)
-$form.Controls.Add($lblRecommend)
+$tabPage1.Controls.Add($lblRecommend)
 
 $lblStatus = New-Object System.Windows.Forms.Label
 $lblStatus.Text = (T 'status.idle')
 $lblStatus.Location = New-Object System.Drawing.Point(20, 312)
 $lblStatus.Size = New-Object System.Drawing.Size(730, 24)
-$form.Controls.Add($lblStatus)
+$tabPage1.Controls.Add($lblStatus)
 
 $btnStart = New-Object System.Windows.Forms.Button
 $btnStart.Text = (T 'btn.start')
 $btnStart.Location = New-Object System.Drawing.Point(510, 270)
 $btnStart.Size = New-Object System.Drawing.Size(115, 34)
-$form.Controls.Add($btnStart)
+$tabPage1.Controls.Add($btnStart)
 
 $btnCancel = New-Object System.Windows.Forms.Button
 $btnCancel.Text = (T 'btn.cancel')
 $btnCancel.Location = New-Object System.Drawing.Point(635, 270)
 $btnCancel.Size = New-Object System.Drawing.Size(115, 34)
 $btnCancel.Add_Click({ $form.Close() })
-$form.Controls.Add($btnCancel)
+$tabPage1.Controls.Add($btnCancel)
+
+# ─── Tab 2: MOD Manager ──────────────────────────────────────────────────────
+
+function Update-ModStatus {
+    param([string]$GameRoot)
+    $jsgmeInRoot = Join-Path $GameRoot $jsgmeExeName
+    if (-not [string]::IsNullOrWhiteSpace($GameRoot) -and (Test-Path $jsgmeInRoot)) {
+        $lblModJsgmeStatus.Text     = (T 'mod.jsgme.status.ok')
+        $lblModJsgmeStatus.ForeColor = [System.Drawing.Color]::DarkGreen
+        $btnModOpen.Enabled          = $true
+    } else {
+        $lblModJsgmeStatus.Text     = (T 'mod.jsgme.status.none')
+        $lblModJsgmeStatus.ForeColor = [System.Drawing.Color]::DarkOrange
+        $btnModOpen.Enabled          = $false
+    }
+}
+
+$lblModWarn = New-Object System.Windows.Forms.Label
+$lblModWarn.Text      = (T 'mod.warn')
+$lblModWarn.Location  = New-Object System.Drawing.Point(12, 12)
+$lblModWarn.Size      = New-Object System.Drawing.Size(740, 20)
+$lblModWarn.ForeColor = [System.Drawing.Color]::DarkOrange
+$tabPage2.Controls.Add($lblModWarn)
+
+$lblModRoot = New-Object System.Windows.Forms.Label
+$lblModRoot.Text     = (T 'mod.lbl.root')
+$lblModRoot.Location = New-Object System.Drawing.Point(12, 44)
+$lblModRoot.Size     = New-Object System.Drawing.Size(115, 24)
+$tabPage2.Controls.Add($lblModRoot)
+
+$txtModRoot = New-Object System.Windows.Forms.TextBox
+$txtModRoot.Location = New-Object System.Drawing.Point(130, 42)
+$txtModRoot.Size     = New-Object System.Drawing.Size(500, 24)
+$tabPage2.Controls.Add($txtModRoot)
+
+$btnModBrowse = New-Object System.Windows.Forms.Button
+$btnModBrowse.Text     = (T 'btn.browse')
+$btnModBrowse.Location = New-Object System.Drawing.Point(638, 40)
+$btnModBrowse.Size     = New-Object System.Drawing.Size(90, 28)
+$btnModBrowse.Add_Click({
+    $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dlg.Description = (T 'mod.lbl.root')
+    if (-not [string]::IsNullOrWhiteSpace($txtModRoot.Text)) {
+        $dlg.SelectedPath = $txtModRoot.Text.Trim()
+    }
+    if ($dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+        $txtModRoot.Text = $dlg.SelectedPath
+    }
+})
+$tabPage2.Controls.Add($btnModBrowse)
+
+$lblModJsgmeStatus = New-Object System.Windows.Forms.Label
+$lblModJsgmeStatus.Text      = (T 'mod.jsgme.status.none')
+$lblModJsgmeStatus.Location  = New-Object System.Drawing.Point(12, 74)
+$lblModJsgmeStatus.Size      = New-Object System.Drawing.Size(720, 20)
+$lblModJsgmeStatus.ForeColor = [System.Drawing.Color]::DarkOrange
+$tabPage2.Controls.Add($lblModJsgmeStatus)
+
+$txtModRoot.Add_TextChanged({
+    Update-ModStatus -GameRoot $txtModRoot.Text.Trim()
+})
+
+$sep1 = New-Object System.Windows.Forms.Label
+$sep1.BorderStyle = [System.Windows.Forms.BorderStyle]::Fixed3D
+$sep1.Location    = New-Object System.Drawing.Point(12, 102)
+$sep1.Size        = New-Object System.Drawing.Size(740, 2)
+$tabPage2.Controls.Add($sep1)
+
+$lblModStep1 = New-Object System.Windows.Forms.Label
+$lblModStep1.Text     = (T 'mod.step1.title')
+$lblModStep1.Location = New-Object System.Drawing.Point(12, 112)
+$lblModStep1.Size     = New-Object System.Drawing.Size(740, 20)
+$lblModStep1.Font     = New-Object System.Drawing.Font($form.Font, [System.Drawing.FontStyle]::Bold)
+$tabPage2.Controls.Add($lblModStep1)
+
+$lblModStep1Note = New-Object System.Windows.Forms.Label
+$lblModStep1Note.Text     = (T 'mod.step1.note')
+$lblModStep1Note.Location = New-Object System.Drawing.Point(28, 135)
+$lblModStep1Note.Size     = New-Object System.Drawing.Size(710, 18)
+$tabPage2.Controls.Add($lblModStep1Note)
+
+$btnModImportFolder = New-Object System.Windows.Forms.Button
+$btnModImportFolder.Text     = (T 'mod.btn.importfolder')
+$btnModImportFolder.Location = New-Object System.Drawing.Point(28, 156)
+$btnModImportFolder.Size     = New-Object System.Drawing.Size(155, 30)
+$btnModImportFolder.Add_Click({
+    $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dlg.Description = (T 'mod.dlg.folder')
+    if ($dlg.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
+    $gameRoot = $txtModRoot.Text.Trim()
+    if ([string]::IsNullOrWhiteSpace($gameRoot)) {
+        [System.Windows.Forms.MessageBox]::Show((T 'mod.err.noroot'), (T 'err.title'), 'OK', 'Warning') | Out-Null
+        return
+    }
+    $lblModImportStatus.Text = (T 'mod.import.doing')
+    [System.Windows.Forms.Application]::DoEvents()
+    try {
+        $destFolder = Join-Path $gameRoot (Split-Path $dlg.SelectedPath -Leaf)
+        Copy-Item -Path $dlg.SelectedPath -Destination $destFolder -Recurse -Force
+        $lblModImportStatus.Text = (T 'mod.import.done')
+    } catch {
+        $lblModImportStatus.Text = (T 'mod.import.err' "$_")
+    }
+})
+$tabPage2.Controls.Add($btnModImportFolder)
+
+$btnModImportZip = New-Object System.Windows.Forms.Button
+$btnModImportZip.Text     = (T 'mod.btn.importzip')
+$btnModImportZip.Location = New-Object System.Drawing.Point(191, 156)
+$btnModImportZip.Size     = New-Object System.Drawing.Size(130, 30)
+$btnModImportZip.Add_Click({
+    $dlg = New-Object System.Windows.Forms.OpenFileDialog
+    $dlg.Title           = (T 'mod.dlg.zip')
+    $dlg.Filter          = (T 'mod.dlg.zip.filter')
+    $dlg.CheckFileExists = $true
+    if ($dlg.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
+    $gameRoot = $txtModRoot.Text.Trim()
+    if ([string]::IsNullOrWhiteSpace($gameRoot)) {
+        [System.Windows.Forms.MessageBox]::Show((T 'mod.err.noroot'), (T 'err.title'), 'OK', 'Warning') | Out-Null
+        return
+    }
+    $lblModImportStatus.Text = (T 'mod.import.doing')
+    [System.Windows.Forms.Application]::DoEvents()
+    try {
+        Expand-Archive -Path $dlg.FileName -DestinationPath $gameRoot -Force
+        $lblModImportStatus.Text = (T 'mod.import.done')
+    } catch {
+        $lblModImportStatus.Text = (T 'mod.import.err' "$_")
+    }
+})
+$tabPage2.Controls.Add($btnModImportZip)
+
+$btnModBaiduDl = New-Object System.Windows.Forms.Button
+$btnModBaiduDl.Text     = (T 'mod.btn.baidudl')
+$btnModBaiduDl.Location = New-Object System.Drawing.Point(329, 156)
+$btnModBaiduDl.Size     = New-Object System.Drawing.Size(130, 30)
+$btnModBaiduDl.Add_Click({
+    if ([string]::IsNullOrWhiteSpace($script:ModsBaiduUrl)) {
+        [System.Windows.Forms.MessageBox]::Show(
+            (T 'mod.err.nobaiduurl'), (T 'err.title'), 'OK', 'Information') | Out-Null
+        return
+    }
+    try {
+        Start-Process $script:ModsBaiduUrl | Out-Null
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("$_", (T 'err.title'), 'OK', 'Warning') | Out-Null
+    }
+})
+$tabPage2.Controls.Add($btnModBaiduDl)
+
+$lblModImportStatus = New-Object System.Windows.Forms.Label
+$lblModImportStatus.Text     = (T 'mod.import.status')
+$lblModImportStatus.Location = New-Object System.Drawing.Point(28, 192)
+$lblModImportStatus.Size     = New-Object System.Drawing.Size(700, 18)
+$tabPage2.Controls.Add($lblModImportStatus)
+
+$sep2 = New-Object System.Windows.Forms.Label
+$sep2.BorderStyle = [System.Windows.Forms.BorderStyle]::Fixed3D
+$sep2.Location    = New-Object System.Drawing.Point(12, 216)
+$sep2.Size        = New-Object System.Drawing.Size(740, 2)
+$tabPage2.Controls.Add($sep2)
+
+$lblModStep2 = New-Object System.Windows.Forms.Label
+$lblModStep2.Text     = (T 'mod.step2.title')
+$lblModStep2.Location = New-Object System.Drawing.Point(12, 226)
+$lblModStep2.Size     = New-Object System.Drawing.Size(740, 20)
+$lblModStep2.Font     = New-Object System.Drawing.Font($form.Font, [System.Drawing.FontStyle]::Bold)
+$tabPage2.Controls.Add($lblModStep2)
+
+$btnModInstall = New-Object System.Windows.Forms.Button
+$btnModInstall.Text     = (T 'mod.btn.install')
+$btnModInstall.Location = New-Object System.Drawing.Point(28, 251)
+$btnModInstall.Size     = New-Object System.Drawing.Size(200, 32)
+$tabPage2.Controls.Add($btnModInstall)
+
+$lblModInstallStatus = New-Object System.Windows.Forms.Label
+$lblModInstallStatus.Text     = (T 'mod.install.status')
+$lblModInstallStatus.Location = New-Object System.Drawing.Point(240, 260)
+$lblModInstallStatus.Size     = New-Object System.Drawing.Size(490, 18)
+$tabPage2.Controls.Add($lblModInstallStatus)
+
+$btnModInstall.Add_Click({
+    $gameRoot = $txtModRoot.Text.Trim()
+    if ([string]::IsNullOrWhiteSpace($gameRoot)) {
+        [System.Windows.Forms.MessageBox]::Show(
+            (T 'mod.err.noroot'), (T 'err.title'), 'OK', 'Warning') | Out-Null
+        return
+    }
+    $lblModInstallStatus.Text = (T 'mod.install.doing')
+    [System.Windows.Forms.Application]::DoEvents()
+    try {
+        if (-not (Test-Path $gameRoot)) {
+            New-Item -Path $gameRoot -ItemType Directory -Force | Out-Null
+        }
+        Copy-Item -Path "$jsGameDir\*" -Destination $gameRoot -Recurse -Force
+        $lblModInstallStatus.Text = (T 'mod.install.done')
+        Update-ModStatus -GameRoot $gameRoot
+    } catch {
+        $lblModInstallStatus.Text = (T 'mod.install.err' "$_")
+    }
+})
+
+$sep3 = New-Object System.Windows.Forms.Label
+$sep3.BorderStyle = [System.Windows.Forms.BorderStyle]::Fixed3D
+$sep3.Location    = New-Object System.Drawing.Point(12, 297)
+$sep3.Size        = New-Object System.Drawing.Size(740, 2)
+$tabPage2.Controls.Add($sep3)
+
+$lblModStep3 = New-Object System.Windows.Forms.Label
+$lblModStep3.Text     = (T 'mod.step3.title')
+$lblModStep3.Location = New-Object System.Drawing.Point(12, 307)
+$lblModStep3.Size     = New-Object System.Drawing.Size(740, 20)
+$lblModStep3.Font     = New-Object System.Drawing.Font($form.Font, [System.Drawing.FontStyle]::Bold)
+$tabPage2.Controls.Add($lblModStep3)
+
+$btnModOpen = New-Object System.Windows.Forms.Button
+$btnModOpen.Text     = (T 'mod.btn.open')
+$btnModOpen.Location = New-Object System.Drawing.Point(28, 332)
+$btnModOpen.Size     = New-Object System.Drawing.Size(240, 32)
+$btnModOpen.Enabled  = $false
+$btnModOpen.Add_Click({
+    $gameRoot    = $txtModRoot.Text.Trim()
+    $jsgmeInRoot = Join-Path $gameRoot $jsgmeExeName
+    if (-not (Test-Path $jsgmeInRoot)) {
+        [System.Windows.Forms.MessageBox]::Show(
+            (T 'mod.err.noexe'), (T 'err.title'), 'OK', 'Warning') | Out-Null
+        return
+    }
+    try {
+        Start-Process -FilePath $jsgmeInRoot -WorkingDirectory $gameRoot | Out-Null
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show(
+            (T 'mod.err.launch' "$_"), (T 'err.title'), 'OK', 'Error') | Out-Null
+    }
+})
+$tabPage2.Controls.Add($btnModOpen)
+
+# ─── End Tab 2 ───────────────────────────────────────────────────────────────
 
 $btnAutoDownload.Add_Click({
     $download = $txtDownload.Text.Trim()
@@ -1141,12 +1462,37 @@ function Apply-MainFormLanguage {
     $btnCancel.Text    = (T 'btn.cancel')
     $lblStatus.Text    = (T 'status.idle')
     $lblDriveHint.Text = Get-DriveHintText -Path $txtDownload.Text.Trim()
+
+    $tabPage1.Text         = (T 'tab.install')
+    $tabPage2.Text         = (T 'tab.mod')
+    $lblModWarn.Text       = (T 'mod.warn')
+    $lblModRoot.Text       = (T 'mod.lbl.root')
+    $btnModBrowse.Text     = (T 'btn.browse')
+    $lblModStep1.Text          = (T 'mod.step1.title')
+    $lblModStep1Note.Text      = (T 'mod.step1.note')
+    $btnModImportFolder.Text   = (T 'mod.btn.importfolder')
+    $btnModImportZip.Text      = (T 'mod.btn.importzip')
+    $btnModBaiduDl.Text        = (T 'mod.btn.baidudl')
+    $lblModStep2.Text      = (T 'mod.step2.title')
+    $btnModInstall.Text    = (T 'mod.btn.install')
+    $lblModStep3.Text      = (T 'mod.step3.title')
+    $btnModOpen.Text       = (T 'mod.btn.open')
+    Update-ModStatus -GameRoot $txtModRoot.Text.Trim()
 }
 
 $cmbLang.Add_SelectedIndexChanged({
     $script:LangCode = if ($cmbLang.SelectedIndex -eq 0) { 'zh' } else { 'en' }
     Apply-MainFormLanguage
 })
+
+$tabControl.Add_SelectedIndexChanged({
+    if ($tabControl.SelectedIndex -eq 1) {
+        $txtModRoot.Text = $txtDownload.Text.Trim()
+        Update-ModStatus -GameRoot $txtModRoot.Text.Trim()
+    }
+})
+
+$form.Controls.Add($tabControl)
 
 Write-StartupLog 'Form ready, calling ShowDialog'
 [void]$form.ShowDialog()

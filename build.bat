@@ -75,6 +75,14 @@ if errorlevel 1 (
     exit /b 1
 )
 
+if exist "%ROOT%\JSGAME\JSGME MOD MANAGER.exe" (
+    if not exist "%STAGE_DIR%\JSGAME" mkdir "%STAGE_DIR%\JSGAME"
+    copy /y "%ROOT%\JSGAME\JSGME MOD MANAGER.exe" "%STAGE_DIR%\JSGAME\" >nul
+    if exist "%ROOT%\JSGAME\JSGME.ini" copy /y "%ROOT%\JSGAME\JSGME.ini" "%STAGE_DIR%\JSGAME\" >nul
+) else (
+    echo [警告] JSGAME\JSGME MOD集合程序.exe 不存在，跳过 MOD 工具复制。
+)
+
 if exist "%ROOT%\*.torrent" (
     copy /y "%ROOT%\*.torrent" "%STAGE_DIR%\" >nul
 )

@@ -7,3 +7,7 @@ release/
 # Runtime cache
 qbt_path.cache
 logs/
+
+# Large MOD archive and MODS folder (distributed separately via GitHub Releases / Baidu)
+JSGAME/*.zip
+JSGAME/MODS/
