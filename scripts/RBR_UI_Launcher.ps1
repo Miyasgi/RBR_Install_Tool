@@ -1137,7 +1137,7 @@ function Expand-ModZip {
         [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $destFile, $true)
         if ($StatusLabel -and ($i % 20 -eq 0 -or $i -eq $total)) {
             $pct = [int]($i * 100 / [Math]::Max($total, 1))
-            $StatusLabel.Text = (T 'mod.import.extracting' "$pct" "$i" "$total")
+            $StatusLabel.Text = (T 'mod.import.extracting' @($pct, $i, $total))
             [System.Windows.Forms.Application]::DoEvents()
         }
     }
