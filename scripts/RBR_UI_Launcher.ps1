@@ -36,7 +36,7 @@ if (-not (Test-Path $logDir)) {
 }
 $runtimeLogPath = Join-Path $logDir "RBR_Auto_Installer.log"
 
-$script:AppVersion = 'v2.0'
+$script:AppVersion = 'v2.1.0'
 
 $jsGameDir    = Join-Path $projectRoot 'JSGAME'
 $jsgmeExeName = 'JSGME MOD MANAGER.exe'
