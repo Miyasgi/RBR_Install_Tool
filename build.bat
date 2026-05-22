@@ -87,6 +87,11 @@ if exist "%ROOT%\*.torrent" (
     copy /y "%ROOT%\*.torrent" "%STAGE_DIR%\" >nul
 )
 
+for %%f in ("%ROOT%\RBRi18n*.zip") do (
+    copy /y "%%f" "%STAGE_DIR%\" >nul
+    echo [OK] 打包汉化包：%%~nxf
+)
+
 echo [2/4] 生成 ZIP...
 if exist "%ZIP_PATH%" del /f /q "%ZIP_PATH%" >nul
 

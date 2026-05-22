@@ -153,13 +153,16 @@ $script:Strings = @{
         'mod.err.launch'         = '启动 JSGME 失败：{0}'
         'mod.err.nodlurl'        = 'MOD 包下载链接暂未配置，请联系发布者获取下载地址。'
         'i18n.step.title'        = '★ 汉化包（RBRi18n）：游戏安装完成后可一键安装'
-        'i18n.btn.install'       = '下载并安装汉化包'
+        'i18n.btn.install'       = '安装内置汉化包'
+        'i18n.btn.update'        = 'GitHub 最新版 ↗'
         'i18n.status.fetching'   = '正在查询最新版本...'
         'i18n.status.dl'         = '正在下载 {0}...'
         'i18n.status.extract'    = '正在解压到游戏目录...'
         'i18n.status.done'       = '✓ 汉化安装完成（{0}）'
+        'i18n.status.bundled'    = '内置：{0}'
         'i18n.err.noroot'        = '请先设置游戏下载目录（第三行）'
         'i18n.err.noasset'       = '未找到可下载的汉化包文件，请检查网络'
+        'i18n.err.nolocal'       = '未找到内置汉化包，请用右侧按钮从 GitHub 下载'
         'i18n.err.fail'          = '失败：{0}'
     }
     en = @{
@@ -269,13 +272,16 @@ $script:Strings = @{
         'mod.err.launch'         = 'Failed to launch JSGME: {0}'
         'mod.err.nodlurl'        = 'MOD pack download link not configured. Please contact the publisher for the download URL.'
         'i18n.step.title'        = '★ Chinese Localization (RBRi18n): one-click install after game setup'
-        'i18n.btn.install'       = 'Download & Install Localization'
+        'i18n.btn.install'       = 'Install Bundled Localization'
+        'i18n.btn.update'        = 'GitHub Latest ↗'
         'i18n.status.fetching'   = 'Checking for latest version...'
         'i18n.status.dl'         = 'Downloading {0}...'
         'i18n.status.extract'    = 'Extracting to game folder...'
         'i18n.status.done'       = '✓ Localization installed ({0})'
+        'i18n.status.bundled'    = 'Bundled: {0}'
         'i18n.err.noroot'        = 'Please set the game download folder first (row 3)'
         'i18n.err.noasset'       = 'No zip asset found in latest release — check your network'
+        'i18n.err.nolocal'       = 'Bundled pack not found. Use the GitHub button to download.'
         'i18n.err.fail'          = 'Failed: {0}'
     }
 }
@@ -1075,6 +1081,23 @@ $tabPage1.Controls.Add($btnCancel)
 
 # ─── Tab 1: i18n section ─────────────────────────────────────────────────────
 
+# 共享解压逻辑
+function Expand-I18nZip {
+    param([string]$ZipPath, [string]$GameRoot)
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
+    foreach ($entry in $zip.Entries) {
+        if ($entry.FullName -match '[/\\]$') { continue }
+        $destPath = Join-Path $GameRoot $entry.FullName
+        $destDir  = Split-Path $destPath -Parent
+        if (-not (Test-Path $destDir)) {
+            New-Item -Path $destDir -ItemType Directory -Force | Out-Null
+        }
+        [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $destPath, $true)
+    }
+    $zip.Dispose()
+}
+
 $sepI18n = New-Object System.Windows.Forms.Label
 $sepI18n.BorderStyle = [System.Windows.Forms.BorderStyle]::Fixed3D
 $sepI18n.Location    = New-Object System.Drawing.Point(12, 344)
@@ -1091,15 +1114,32 @@ $tabPage1.Controls.Add($lblI18nTitle)
 $btnI18n = New-Object System.Windows.Forms.Button
 $btnI18n.Text     = (T 'i18n.btn.install')
 $btnI18n.Location = New-Object System.Drawing.Point(20, 378)
-$btnI18n.Size     = New-Object System.Drawing.Size(190, 34)
+$btnI18n.Size     = New-Object System.Drawing.Size(163, 34)
 $tabPage1.Controls.Add($btnI18n)
 
+$btnI18nUpdate = New-Object System.Windows.Forms.Button
+$btnI18nUpdate.Text     = (T 'i18n.btn.update')
+$btnI18nUpdate.Location = New-Object System.Drawing.Point(191, 378)
+$btnI18nUpdate.Size     = New-Object System.Drawing.Size(130, 34)
+$tabPage1.Controls.Add($btnI18nUpdate)
+
 $lblI18nStatus = New-Object System.Windows.Forms.Label
-$lblI18nStatus.Text     = ''
-$lblI18nStatus.Location = New-Object System.Drawing.Point(220, 385)
-$lblI18nStatus.Size     = New-Object System.Drawing.Size(530, 20)
+$lblI18nStatus.Location = New-Object System.Drawing.Point(330, 385)
+$lblI18nStatus.Size     = New-Object System.Drawing.Size(420, 20)
 $tabPage1.Controls.Add($lblI18nStatus)
 
+# 启动时显示内置版本名称
+$script:I18nLocalZip = Get-ChildItem -Path $projectRoot -Filter 'RBRi18n*.zip' -ErrorAction SilentlyContinue |
+    Sort-Object Name -Descending | Select-Object -First 1
+if ($script:I18nLocalZip) {
+    $lblI18nStatus.Text      = (T 'i18n.status.bundled' $script:I18nLocalZip.Name)
+    $lblI18nStatus.ForeColor = [System.Drawing.Color]::DarkBlue
+} else {
+    $lblI18nStatus.Text      = (T 'i18n.err.nolocal')
+    $lblI18nStatus.ForeColor = [System.Drawing.Color]::DarkOrange
+}
+
+# 安装内置版本
 $btnI18n.Add_Click({
     $gameRoot = $txtDownload.Text.Trim()
     if ([string]::IsNullOrWhiteSpace($gameRoot)) {
@@ -1107,39 +1147,55 @@ $btnI18n.Add_Click({
             (T 'i18n.err.noroot'), (T 'err.title'), 'OK', 'Warning') | Out-Null
         return
     }
+    $localZip = Get-ChildItem -Path $projectRoot -Filter 'RBRi18n*.zip' -ErrorAction SilentlyContinue |
+        Sort-Object Name -Descending | Select-Object -First 1
+    if (-not $localZip) {
+        $lblI18nStatus.ForeColor = [System.Drawing.Color]::DarkOrange
+        $lblI18nStatus.Text      = (T 'i18n.err.nolocal')
+        return
+    }
     $btnI18n.Enabled         = $false
+    $lblI18nStatus.ForeColor = $form.ForeColor
+    $lblI18nStatus.Text      = (T 'i18n.status.extract')
+    [System.Windows.Forms.Application]::DoEvents()
+    try {
+        Expand-I18nZip -ZipPath $localZip.FullName -GameRoot $gameRoot
+        $lblI18nStatus.ForeColor = [System.Drawing.Color]::DarkGreen
+        $lblI18nStatus.Text      = (T 'i18n.status.done' $localZip.Name)
+    } catch {
+        $lblI18nStatus.ForeColor = [System.Drawing.Color]::DarkRed
+        $lblI18nStatus.Text      = (T 'i18n.err.fail' "$_")
+    } finally {
+        $btnI18n.Enabled = $true
+    }
+})
+
+# 从 GitHub 下载最新版
+$btnI18nUpdate.Add_Click({
+    $gameRoot = $txtDownload.Text.Trim()
+    if ([string]::IsNullOrWhiteSpace($gameRoot)) {
+        [System.Windows.Forms.MessageBox]::Show(
+            (T 'i18n.err.noroot'), (T 'err.title'), 'OK', 'Warning') | Out-Null
+        return
+    }
+    $btnI18nUpdate.Enabled   = $false
     $lblI18nStatus.ForeColor = $form.ForeColor
     $lblI18nStatus.Text      = (T 'i18n.status.fetching')
     [System.Windows.Forms.Application]::DoEvents()
     try {
-        # 1. 获取最新 release 信息
         $apiUrl  = 'https://api.github.com/repos/geekerlw/RBRi18n/releases/latest'
         $release = Invoke-RestMethod -Uri $apiUrl -UseBasicParsing -ErrorAction Stop
         $asset   = @($release.assets) | Where-Object { $_.name -like '*.zip' } | Select-Object -First 1
         if (-not $asset) { throw (T 'i18n.err.noasset') }
 
-        # 2. 下载到临时目录
-        $zipUrl = $asset.browser_download_url
         $tmpZip = Join-Path $env:TEMP 'RBRi18n_tmp.zip'
         $lblI18nStatus.Text = (T 'i18n.status.dl' $asset.name)
         [System.Windows.Forms.Application]::DoEvents()
-        Invoke-WebRequest -Uri $zipUrl -OutFile $tmpZip -UseBasicParsing -ErrorAction Stop
+        Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $tmpZip -UseBasicParsing -ErrorAction Stop
 
-        # 3. 解压 Plugins\ 和 RBRi18n\ 到游戏目录
         $lblI18nStatus.Text = (T 'i18n.status.extract')
         [System.Windows.Forms.Application]::DoEvents()
-        Add-Type -AssemblyName System.IO.Compression.FileSystem
-        $zip = [System.IO.Compression.ZipFile]::OpenRead($tmpZip)
-        foreach ($entry in $zip.Entries) {
-            if ($entry.FullName -match '[/\\]$') { continue }   # 跳过纯目录条目
-            $destPath = Join-Path $gameRoot $entry.FullName
-            $destDir  = Split-Path $destPath -Parent
-            if (-not (Test-Path $destDir)) {
-                New-Item -Path $destDir -ItemType Directory -Force | Out-Null
-            }
-            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $destPath, $true)
-        }
-        $zip.Dispose()
+        Expand-I18nZip -ZipPath $tmpZip -GameRoot $gameRoot
         Remove-Item $tmpZip -Force -ErrorAction SilentlyContinue
 
         $lblI18nStatus.ForeColor = [System.Drawing.Color]::DarkGreen
@@ -1148,7 +1204,7 @@ $btnI18n.Add_Click({
         $lblI18nStatus.ForeColor = [System.Drawing.Color]::DarkRed
         $lblI18nStatus.Text      = (T 'i18n.err.fail' "$_")
     } finally {
-        $btnI18n.Enabled = $true
+        $btnI18nUpdate.Enabled = $true
     }
 })
 
@@ -1582,8 +1638,9 @@ function Apply-MainFormLanguage {
     $btnCancel.Text    = (T 'btn.cancel')
     $lblStatus.Text    = (T 'status.idle')
     $lblDriveHint.Text = Get-DriveHintText -Path $txtDownload.Text.Trim()
-    $lblI18nTitle.Text = (T 'i18n.step.title')
-    $btnI18n.Text      = (T 'i18n.btn.install')
+    $lblI18nTitle.Text    = (T 'i18n.step.title')
+    $btnI18n.Text         = (T 'i18n.btn.install')
+    $btnI18nUpdate.Text   = (T 'i18n.btn.update')
 
     $tabPage1.Text         = (T 'tab.install')
     $tabPage2.Text         = (T 'tab.mod')
