@@ -36,6 +36,8 @@ if (-not (Test-Path $logDir)) {
 }
 $runtimeLogPath = Join-Path $logDir "RBR_Auto_Installer.log"
 
+$script:AppVersion = 'v2.0'
+
 $jsGameDir    = Join-Path $projectRoot 'JSGAME'
 $jsgmeExeName = 'JSGME MOD MANAGER.exe'
 # Fill in the Baidu Netdisk URL for the MODS pack before distributing:
@@ -823,7 +825,7 @@ function Show-RunMonitor {
 }
 
 $form = New-Object System.Windows.Forms.Form
-$form.Text = (T 'form.title')
+$form.Text = "$(T 'form.title')  $script:AppVersion"
 $form.StartPosition = "CenterScreen"
 $form.Size = New-Object System.Drawing.Size(780, 490)
 $form.FormBorderStyle = "FixedDialog"
@@ -1620,7 +1622,7 @@ if ($txtDownload.Text.Trim() -match '^[Cc]:\\') {
 }
 
 function Apply-MainFormLanguage {
-    $form.Text         = (T 'form.title')
+    $form.Text         = "$(T 'form.title')  $script:AppVersion"
     $lblTips.Text      = (T 'tips')
     $lblTorrent.Text   = (T 'lbl.torrent')
     $lblInstaller.Text = (T 'lbl.installer')
@@ -1672,6 +1674,22 @@ $tabControl.Add_SelectedIndexChanged({
     }
 })
 
+# ─── 底部开发者信息条（两个 Tab 均可见）────────────────────────────────────────
+$pnlCredits = New-Object System.Windows.Forms.Panel
+$pnlCredits.Dock      = [System.Windows.Forms.DockStyle]::Bottom
+$pnlCredits.Height    = 20
+$pnlCredits.BackColor = [System.Drawing.SystemColors]::ControlLight
+
+$lblCredits = New-Object System.Windows.Forms.Label
+$lblCredits.Text      = "miyasgi  ·  魔法界的天空"
+$lblCredits.Dock      = [System.Windows.Forms.DockStyle]::Fill
+$lblCredits.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+$lblCredits.Font      = New-Object System.Drawing.Font($form.Font.FontFamily, 7.5)
+$lblCredits.ForeColor = [System.Drawing.Color]::Gray
+$pnlCredits.Controls.Add($lblCredits)
+
+# Bottom 控件必须在 Fill 控件之前加入，布局才正确
+$form.Controls.Add($pnlCredits)
 $form.Controls.Add($tabControl)
 
 Write-StartupLog 'Form ready, calling ShowDialog'
