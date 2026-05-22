@@ -822,8 +822,15 @@ $tabPage2.UseVisualStyleBackColor = $true
 [void]$tabControl.TabPages.Add($tabPage1)
 [void]$tabControl.TabPages.Add($tabPage2)
 
+$lblLang = New-Object System.Windows.Forms.Label
+$lblLang.Text      = '语言/Language:'
+$lblLang.Location  = New-Object System.Drawing.Point(530, 11)
+$lblLang.Size      = New-Object System.Drawing.Size(88, 20)
+$lblLang.TextAlign = [System.Drawing.ContentAlignment]::MiddleRight
+$tabPage1.Controls.Add($lblLang)
+
 $cmbLang = New-Object System.Windows.Forms.ComboBox
-$cmbLang.Location = New-Object System.Drawing.Point(620, 8)
+$cmbLang.Location = New-Object System.Drawing.Point(622, 8)
 $cmbLang.Size = New-Object System.Drawing.Size(70, 24)
 $cmbLang.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
 [void]$cmbLang.Items.Add('中文')
