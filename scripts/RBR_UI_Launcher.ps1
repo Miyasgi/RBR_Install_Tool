@@ -865,8 +865,8 @@ $tabPage1.Controls.Add($cmbLang)
 if (Test-Path $logoPng) {
     try {
         $picLogo = New-Object System.Windows.Forms.PictureBox
-        $picLogo.Location = New-Object System.Drawing.Point(700, 8)
-        $picLogo.Size = New-Object System.Drawing.Size(56, 56)
+        $picLogo.Location = New-Object System.Drawing.Point(716, 8)
+        $picLogo.Size = New-Object System.Drawing.Size(28, 28)
         $picLogo.SizeMode = [System.Windows.Forms.PictureBoxSizeMode]::Zoom
         $picLogo.Image = [System.Drawing.Image]::FromFile($logoPng)
         $tabPage1.Controls.Add($picLogo)
