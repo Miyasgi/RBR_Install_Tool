@@ -11,3 +11,6 @@ logs/
 # Large MOD archive and MODS folder (distributed separately via GitHub Releases / Baidu)
 JSGAME/*.zip
 JSGAME/MODS/
+
+# i18n pack zip (downloaded on demand, not bundled)
+RBRi18n*.zip

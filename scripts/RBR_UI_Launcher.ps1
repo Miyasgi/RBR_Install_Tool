@@ -152,6 +152,15 @@ $script:Strings = @{
         'mod.err.noexe'          = '游戏目录中未找到 JSGME，请先完成第二步部署。'
         'mod.err.launch'         = '启动 JSGME 失败：{0}'
         'mod.err.nodlurl'        = 'MOD 包下载链接暂未配置，请联系发布者获取下载地址。'
+        'i18n.step.title'        = '★ 汉化包（RBRi18n）：游戏安装完成后可一键安装'
+        'i18n.btn.install'       = '下载并安装汉化包'
+        'i18n.status.fetching'   = '正在查询最新版本...'
+        'i18n.status.dl'         = '正在下载 {0}...'
+        'i18n.status.extract'    = '正在解压到游戏目录...'
+        'i18n.status.done'       = '✓ 汉化安装完成（{0}）'
+        'i18n.err.noroot'        = '请先设置游戏下载目录（第三行）'
+        'i18n.err.noasset'       = '未找到可下载的汉化包文件，请检查网络'
+        'i18n.err.fail'          = '失败：{0}'
     }
     en = @{
         'form.title'             = 'RBR Installer Assistant'
@@ -259,6 +268,15 @@ $script:Strings = @{
         'mod.err.noexe'          = 'JSGME not found in game folder. Please complete Step 2 first.'
         'mod.err.launch'         = 'Failed to launch JSGME: {0}'
         'mod.err.nodlurl'        = 'MOD pack download link not configured. Please contact the publisher for the download URL.'
+        'i18n.step.title'        = '★ Chinese Localization (RBRi18n): one-click install after game setup'
+        'i18n.btn.install'       = 'Download & Install Localization'
+        'i18n.status.fetching'   = 'Checking for latest version...'
+        'i18n.status.dl'         = 'Downloading {0}...'
+        'i18n.status.extract'    = 'Extracting to game folder...'
+        'i18n.status.done'       = '✓ Localization installed ({0})'
+        'i18n.err.noroot'        = 'Please set the game download folder first (row 3)'
+        'i18n.err.noasset'       = 'No zip asset found in latest release — check your network'
+        'i18n.err.fail'          = 'Failed: {0}'
     }
 }
 
@@ -801,7 +819,7 @@ function Show-RunMonitor {
 $form = New-Object System.Windows.Forms.Form
 $form.Text = (T 'form.title')
 $form.StartPosition = "CenterScreen"
-$form.Size = New-Object System.Drawing.Size(780, 450)
+$form.Size = New-Object System.Drawing.Size(780, 490)
 $form.FormBorderStyle = "FixedDialog"
 $form.MaximizeBox = $false
 $form.MinimizeBox = $false
@@ -1054,6 +1072,85 @@ $btnCancel.Location = New-Object System.Drawing.Point(635, 270)
 $btnCancel.Size = New-Object System.Drawing.Size(115, 34)
 $btnCancel.Add_Click({ $form.Close() })
 $tabPage1.Controls.Add($btnCancel)
+
+# ─── Tab 1: i18n section ─────────────────────────────────────────────────────
+
+$sepI18n = New-Object System.Windows.Forms.Label
+$sepI18n.BorderStyle = [System.Windows.Forms.BorderStyle]::Fixed3D
+$sepI18n.Location    = New-Object System.Drawing.Point(12, 344)
+$sepI18n.Size        = New-Object System.Drawing.Size(740, 2)
+$tabPage1.Controls.Add($sepI18n)
+
+$lblI18nTitle = New-Object System.Windows.Forms.Label
+$lblI18nTitle.Text     = (T 'i18n.step.title')
+$lblI18nTitle.Location = New-Object System.Drawing.Point(20, 354)
+$lblI18nTitle.Size     = New-Object System.Drawing.Size(740, 20)
+$lblI18nTitle.Font     = New-Object System.Drawing.Font($form.Font, [System.Drawing.FontStyle]::Bold)
+$tabPage1.Controls.Add($lblI18nTitle)
+
+$btnI18n = New-Object System.Windows.Forms.Button
+$btnI18n.Text     = (T 'i18n.btn.install')
+$btnI18n.Location = New-Object System.Drawing.Point(20, 378)
+$btnI18n.Size     = New-Object System.Drawing.Size(190, 34)
+$tabPage1.Controls.Add($btnI18n)
+
+$lblI18nStatus = New-Object System.Windows.Forms.Label
+$lblI18nStatus.Text     = ''
+$lblI18nStatus.Location = New-Object System.Drawing.Point(220, 385)
+$lblI18nStatus.Size     = New-Object System.Drawing.Size(530, 20)
+$tabPage1.Controls.Add($lblI18nStatus)
+
+$btnI18n.Add_Click({
+    $gameRoot = $txtDownload.Text.Trim()
+    if ([string]::IsNullOrWhiteSpace($gameRoot)) {
+        [System.Windows.Forms.MessageBox]::Show(
+            (T 'i18n.err.noroot'), (T 'err.title'), 'OK', 'Warning') | Out-Null
+        return
+    }
+    $btnI18n.Enabled         = $false
+    $lblI18nStatus.ForeColor = $form.ForeColor
+    $lblI18nStatus.Text      = (T 'i18n.status.fetching')
+    [System.Windows.Forms.Application]::DoEvents()
+    try {
+        # 1. 获取最新 release 信息
+        $apiUrl  = 'https://api.github.com/repos/geekerlw/RBRi18n/releases/latest'
+        $release = Invoke-RestMethod -Uri $apiUrl -UseBasicParsing -ErrorAction Stop
+        $asset   = @($release.assets) | Where-Object { $_.name -like '*.zip' } | Select-Object -First 1
+        if (-not $asset) { throw (T 'i18n.err.noasset') }
+
+        # 2. 下载到临时目录
+        $zipUrl = $asset.browser_download_url
+        $tmpZip = Join-Path $env:TEMP 'RBRi18n_tmp.zip'
+        $lblI18nStatus.Text = (T 'i18n.status.dl' $asset.name)
+        [System.Windows.Forms.Application]::DoEvents()
+        Invoke-WebRequest -Uri $zipUrl -OutFile $tmpZip -UseBasicParsing -ErrorAction Stop
+
+        # 3. 解压 Plugins\ 和 RBRi18n\ 到游戏目录
+        $lblI18nStatus.Text = (T 'i18n.status.extract')
+        [System.Windows.Forms.Application]::DoEvents()
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        $zip = [System.IO.Compression.ZipFile]::OpenRead($tmpZip)
+        foreach ($entry in $zip.Entries) {
+            if ($entry.FullName -match '[/\\]$') { continue }   # 跳过纯目录条目
+            $destPath = Join-Path $gameRoot $entry.FullName
+            $destDir  = Split-Path $destPath -Parent
+            if (-not (Test-Path $destDir)) {
+                New-Item -Path $destDir -ItemType Directory -Force | Out-Null
+            }
+            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $destPath, $true)
+        }
+        $zip.Dispose()
+        Remove-Item $tmpZip -Force -ErrorAction SilentlyContinue
+
+        $lblI18nStatus.ForeColor = [System.Drawing.Color]::DarkGreen
+        $lblI18nStatus.Text      = (T 'i18n.status.done' $asset.name)
+    } catch {
+        $lblI18nStatus.ForeColor = [System.Drawing.Color]::DarkRed
+        $lblI18nStatus.Text      = (T 'i18n.err.fail' "$_")
+    } finally {
+        $btnI18n.Enabled = $true
+    }
+})
 
 # ─── Tab 2: MOD Manager ──────────────────────────────────────────────────────
 
@@ -1485,6 +1582,8 @@ function Apply-MainFormLanguage {
     $btnCancel.Text    = (T 'btn.cancel')
     $lblStatus.Text    = (T 'status.idle')
     $lblDriveHint.Text = Get-DriveHintText -Path $txtDownload.Text.Trim()
+    $lblI18nTitle.Text = (T 'i18n.step.title')
+    $btnI18n.Text      = (T 'i18n.btn.install')
 
     $tabPage1.Text         = (T 'tab.install')
     $tabPage2.Text         = (T 'tab.mod')
