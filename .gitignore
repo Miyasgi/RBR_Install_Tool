@@ -12,5 +12,5 @@ logs/
 JSGAME/*.zip
 JSGAME/MODS/
 
-# i18n pack zip (downloaded on demand, not bundled)
-RBRi18n*.zip
+# i18n pack zip — committed for bundling; only ignore future download caches
+# RBRi18n*.zip   ← intentionally NOT ignored so CI can package the stable release

@@ -39,7 +39,11 @@ jobs:
         shell: pwsh
         run: |
           $ver = "${{ github.event.inputs.version }}"
-          $include = @("启动安装助手.bat", "RBR_Install_Assistant.exe", "README.md", "scripts", "assets")
+          $include = [System.Collections.Generic.List[string]]@(
+            "启动安装助手.bat", "RBR_Install_Assistant.exe", "README.md",
+            "scripts", "assets", "dist", "JSGAME"
+          )
+          Get-ChildItem -Filter "RBRi18n*.zip" | ForEach-Object { $include.Add($_.Name) }
           Compress-Archive -Path $include -DestinationPath "RBR_Install_Tool_${ver}.zip"
 
       - name: Create GitHub Release
