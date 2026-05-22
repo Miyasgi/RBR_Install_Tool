@@ -42,7 +42,7 @@ $jsGameDir    = Join-Path $projectRoot 'JSGAME'
 $jsgmeExeName = 'JSGME MOD MANAGER.exe'
 # Fill in the Baidu Netdisk URL for the MODS pack before distributing:
 $script:ModsGithubUrl    = 'https://github.com/Miyasgi/RBR_Install_Tool/releases/download/v2.2.1/RBR_MODS.zip'
-$script:ModsGithubSha256 = ''   # set to SHA256 of the ZIP to enable integrity check
+$script:ModsGithubSha256 = 'f83e3ac0da86cb8218a43e27563cac48422b412c6c0d551e9c38f707e4a64927'
 $script:ModsBaiduUrl    = 'https://pan.baidu.com/s/1ZiGbMfBat1Ok0I6nAU8Jxg?pwd=fxme'
 
 $script:AppIcon = $null
