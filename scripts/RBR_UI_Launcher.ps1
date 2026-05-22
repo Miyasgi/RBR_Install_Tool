@@ -154,6 +154,13 @@ $script:Strings = @{
         'mod.err.noexe'          = '游戏目录中未找到 JSGME，请先完成第二步部署。'
         'mod.err.launch'         = '启动 JSGME 失败：{0}'
         'mod.err.nodlurl'        = 'MOD 包下载链接暂未配置，请联系发布者获取下载地址。'
+        'mod.import.extracting'  = '正在解压... {0}% ({1}/{2})'
+        'mod.dl.starting'        = '正在连接 GitHub，请稍候...'
+        'mod.dl.progress'        = '正在下载... {0} MB'
+        'mod.dl.extracting'      = '下载完成，正在解压...'
+        'mod.dl.done'            = '✓ MOD 包下载并导入完成'
+        'mod.dl.fail'            = '下载失败，请检查网络或改用百度网盘下载后本地导入'
+        'mod.install.warn.nomods'= '⚠ JSGME 已部署，但 MODS 文件夹为空——请先完成第一步导入 MOD 包'
         'i18n.step.title'        = '★ 汉化包（RBRi18n）：游戏安装完成后可一键安装'
         'i18n.btn.install'       = '安装内置汉化包'
         'i18n.btn.update'        = 'GitHub 最新版 ↗'
@@ -273,6 +280,13 @@ $script:Strings = @{
         'mod.err.noexe'          = 'JSGME not found in game folder. Please complete Step 2 first.'
         'mod.err.launch'         = 'Failed to launch JSGME: {0}'
         'mod.err.nodlurl'        = 'MOD pack download link not configured. Please contact the publisher for the download URL.'
+        'mod.import.extracting'  = 'Extracting... {0}% ({1}/{2})'
+        'mod.dl.starting'        = 'Connecting to GitHub, please wait...'
+        'mod.dl.progress'        = 'Downloading... {0} MB'
+        'mod.dl.extracting'      = 'Download complete, extracting...'
+        'mod.dl.done'            = '✓ MOD pack downloaded and imported'
+        'mod.dl.fail'            = 'Download failed. Check network or use Baidu Netdisk and import locally.'
+        'mod.install.warn.nomods'= '⚠ JSGME deployed, but MODS folder is empty — complete Step 1 first'
         'i18n.step.title'        = '★ Chinese Localization (RBRi18n): one-click install after game setup'
         'i18n.btn.install'       = 'Install Bundled Localization'
         'i18n.btn.update'        = 'GitHub Latest ↗'
@@ -1100,6 +1114,36 @@ function Expand-I18nZip {
     $zip.Dispose()
 }
 
+# Expand a MOD ZIP into DestPath with per-entry DoEvents for UI responsiveness.
+# StatusLabel: optional Label control to display progress text.
+function Expand-ModZip {
+    param(
+        [string]$ZipPath,
+        [string]$DestPath,
+        [System.Windows.Forms.Label]$StatusLabel = $null
+    )
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip   = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
+    $total = $zip.Entries.Count
+    $i     = 0
+    foreach ($entry in $zip.Entries) {
+        $i++
+        if ($entry.FullName -match '[/\\]$') { continue }   # directory-only entry
+        $destFile = Join-Path $DestPath $entry.FullName
+        $destDir  = Split-Path $destFile -Parent
+        if (-not (Test-Path $destDir)) {
+            New-Item -Path $destDir -ItemType Directory -Force | Out-Null
+        }
+        [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $destFile, $true)
+        if ($StatusLabel -and ($i % 20 -eq 0 -or $i -eq $total)) {
+            $pct = [int]($i * 100 / [Math]::Max($total, 1))
+            $StatusLabel.Text = (T 'mod.import.extracting' @($pct, $i, $total))
+            [System.Windows.Forms.Application]::DoEvents()
+        }
+    }
+    $zip.Dispose()
+}
+
 $sepI18n = New-Object System.Windows.Forms.Label
 $sepI18n.BorderStyle = [System.Windows.Forms.BorderStyle]::Fixed3D
 $sepI18n.Location    = New-Object System.Drawing.Point(12, 344)
@@ -1330,13 +1374,33 @@ $btnModImportZip.Add_Click({
         [System.Windows.Forms.MessageBox]::Show((T 'mod.err.noroot'), (T 'err.title'), 'OK', 'Warning') | Out-Null
         return
     }
+    $btnModImportZip.Enabled    = $false
+    $btnModImportFolder.Enabled = $false
+    $btnModGithubDl.Enabled     = $false
     $lblModImportStatus.Text = (T 'mod.import.doing')
     [System.Windows.Forms.Application]::DoEvents()
     try {
-        Expand-Archive -Path $dlg.FileName -DestinationPath $gameRoot -Force
-        $lblModImportStatus.Text = (T 'mod.import.done')
+        Expand-ModZip -ZipPath $dlg.FileName -DestPath $gameRoot -StatusLabel $lblModImportStatus
+        # Validate that something was actually extracted
+        $modsFolder = Join-Path $gameRoot 'MODS'
+        $hasContent = (Test-Path $modsFolder) -and (Get-ChildItem -Path $modsFolder -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1)
+        if ($hasContent) {
+            $lblModImportStatus.Text = (T 'mod.import.done')
+        } else {
+            # Maybe the ZIP root has content but not under MODS/ — count any extracted files
+            $anyFile = Get-ChildItem -Path $gameRoot -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($anyFile) {
+                $lblModImportStatus.Text = (T 'mod.import.done')
+            } else {
+                $lblModImportStatus.Text = (T 'mod.import.err' '解压后目录为空，请确认 ZIP 文件内容')
+            }
+        }
     } catch {
         $lblModImportStatus.Text = (T 'mod.import.err' "$_")
+    } finally {
+        $btnModImportZip.Enabled    = $true
+        $btnModImportFolder.Enabled = $true
+        $btnModGithubDl.Enabled     = $true
     }
 })
 $tabPage2.Controls.Add($btnModImportZip)
@@ -1345,12 +1409,98 @@ $btnModGithubDl = New-Object System.Windows.Forms.Button
 $btnModGithubDl.Text     = (T 'mod.btn.githubdl')
 $btnModGithubDl.Location = New-Object System.Drawing.Point(298, 156)
 $btnModGithubDl.Size     = New-Object System.Drawing.Size(116, 30)
+$script:ModsDlJob     = $null
+$script:ModsDlTmpPath = $null
+$script:ModsDlTimer   = $null
+
 $btnModGithubDl.Add_Click({
-    try {
-        Start-Process $script:ModsGithubUrl | Out-Null
-    } catch {
-        [System.Windows.Forms.MessageBox]::Show("$_", (T 'err.title'), 'OK', 'Warning') | Out-Null
+    if ([string]::IsNullOrWhiteSpace($script:ModsGithubUrl)) {
+        [System.Windows.Forms.MessageBox]::Show(
+            (T 'mod.err.nodlurl'), (T 'err.title'), 'OK', 'Information') | Out-Null
+        return
     }
+    $gameRoot = $txtModRoot.Text.Trim()
+    if ([string]::IsNullOrWhiteSpace($gameRoot)) {
+        [System.Windows.Forms.MessageBox]::Show(
+            (T 'mod.err.noroot'), (T 'err.title'), 'OK', 'Warning') | Out-Null
+        return
+    }
+
+    $tmpZip = Join-Path $env:TEMP 'RBR_MODS_download.zip'
+    $script:ModsDlTmpPath = $tmpZip
+    $dlUrl  = $script:ModsGithubUrl
+
+    # Disable all Step-1 buttons while downloading
+    $btnModGithubDl.Enabled     = $false
+    $btnModBaiduDl.Enabled      = $false
+    $btnModImportZip.Enabled    = $false
+    $btnModImportFolder.Enabled = $false
+    $lblModImportStatus.Text    = (T 'mod.dl.starting')
+    [System.Windows.Forms.Application]::DoEvents()
+
+    # Remove stale temp file
+    try { if (Test-Path $tmpZip) { Remove-Item $tmpZip -Force -ErrorAction SilentlyContinue } } catch {}
+
+    # Background download job (separate PS process — no UI access needed)
+    $script:ModsDlJob = Start-Job -ScriptBlock {
+        param($url, $dest)
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        $wc = New-Object System.Net.WebClient
+        $wc.Headers.Add('User-Agent', 'Mozilla/5.0')
+        $wc.DownloadFile($url, $dest)
+    } -ArgumentList $dlUrl, $tmpZip
+
+    # WinForms Timer polls on UI thread — safe to update controls directly
+    $script:ModsDlTimer = New-Object System.Windows.Forms.Timer
+    $script:ModsDlTimer.Interval = 800
+    $script:ModsDlTimer.Add_Tick({
+        $job = $script:ModsDlJob
+        if ($null -eq $job) { $script:ModsDlTimer.Stop(); return }
+
+        # Show downloaded size while running
+        if ($job.State -in 'Running','NotStarted') {
+            $tp = $script:ModsDlTmpPath
+            if ($tp -and (Test-Path $tp)) {
+                try {
+                    $mb = [math]::Round((Get-Item $tp -ErrorAction Stop).Length / 1MB, 1)
+                    $lblModImportStatus.Text = (T 'mod.dl.progress' "$mb")
+                } catch {}
+            }
+            return
+        }
+
+        # Job finished (Completed / Failed / Stopped)
+        $script:ModsDlTimer.Stop()
+        Receive-Job $job -ErrorAction SilentlyContinue | Out-Null
+        Remove-Job  $job -Force -ErrorAction SilentlyContinue
+        $script:ModsDlJob = $null
+
+        # Re-enable buttons
+        $btnModGithubDl.Enabled     = $true
+        $btnModBaiduDl.Enabled      = $true
+        $btnModImportZip.Enabled    = $true
+        $btnModImportFolder.Enabled = $true
+
+        $tp2 = $script:ModsDlTmpPath
+        $fileOk = $tp2 -and (Test-Path $tp2) -and ((Get-Item $tp2 -ErrorAction SilentlyContinue).Length -gt 10240)
+        if (-not $fileOk) {
+            $lblModImportStatus.Text = (T 'mod.dl.fail')
+            return
+        }
+
+        # Extract on UI thread with per-entry DoEvents
+        $gr = $txtModRoot.Text.Trim()
+        $lblModImportStatus.Text = (T 'mod.dl.extracting')
+        [System.Windows.Forms.Application]::DoEvents()
+        try {
+            Expand-ModZip -ZipPath $tp2 -DestPath $gr -StatusLabel $lblModImportStatus
+            $lblModImportStatus.Text = (T 'mod.dl.done')
+        } catch {
+            $lblModImportStatus.Text = (T 'mod.import.err' "$_")
+        }
+        try { Remove-Item $tp2 -Force -ErrorAction SilentlyContinue } catch {}
+    })
+    $script:ModsDlTimer.Start()
 })
 $tabPage2.Controls.Add($btnModGithubDl)
 
@@ -1410,6 +1560,15 @@ $btnModInstall.Add_Click({
             (T 'mod.err.noroot'), (T 'err.title'), 'OK', 'Warning') | Out-Null
         return
     }
+
+    # Check JSGME source exists
+    $jsgmeSrc = Join-Path $jsGameDir $jsgmeExeName
+    if (-not (Test-Path $jsgmeSrc)) {
+        [System.Windows.Forms.MessageBox]::Show(
+            (T 'mod.err.nojsgame' $jsGameDir), (T 'err.title'), 'OK', 'Warning') | Out-Null
+        return
+    }
+
     $lblModInstallStatus.Text = (T 'mod.install.doing')
     [System.Windows.Forms.Application]::DoEvents()
     try {
@@ -1417,8 +1576,25 @@ $btnModInstall.Add_Click({
             New-Item -Path $gameRoot -ItemType Directory -Force | Out-Null
         }
         Copy-Item -Path "$jsGameDir\*" -Destination $gameRoot -Recurse -Force
-        $lblModInstallStatus.Text = (T 'mod.install.done')
+
+        # Verify JSGME exe landed in game folder
+        $jsgmeDest = Join-Path $gameRoot $jsgmeExeName
+        if (-not (Test-Path $jsgmeDest)) {
+            $lblModInstallStatus.Text = (T 'mod.install.err' 'JSGME 文件复制后未找到，请检查 JSGAME 目录')
+            return
+        }
+
         Update-ModStatus -GameRoot $gameRoot
+
+        # Warn if MODS folder is still empty (Step 1 not done)
+        $modsFolder = Join-Path $gameRoot 'MODS'
+        $hasContent = (Test-Path $modsFolder) -and `
+                      ($null -ne (Get-ChildItem -Path $modsFolder -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1))
+        if (-not $hasContent) {
+            $lblModInstallStatus.Text = (T 'mod.install.warn.nomods')
+        } else {
+            $lblModInstallStatus.Text = (T 'mod.install.done')
+        }
     } catch {
         $lblModInstallStatus.Text = (T 'mod.install.err' "$_")
     }
