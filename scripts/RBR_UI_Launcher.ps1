@@ -1128,13 +1128,19 @@ function Expand-ModZip {
     $i     = 0
     foreach ($entry in $zip.Entries) {
         $i++
-        if ($entry.FullName -match '[/\\]$') { continue }   # directory-only entry
+        # Skip directory entries and Windows system files that are often locked
+        if ($entry.FullName -match '[/\\]$') { continue }
+        if ($entry.Name -match '^(desktop\.ini|thumbs\.db|\.DS_Store)$') { continue }
         $destFile = Join-Path $DestPath $entry.FullName
         $destDir  = Split-Path $destFile -Parent
         if (-not (Test-Path $destDir)) {
             New-Item -Path $destDir -ItemType Directory -Force | Out-Null
         }
-        [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $destFile, $true)
+        try {
+            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $destFile, $true)
+        } catch {
+            # Skip files we can't write (locked system files, etc.) and continue
+        }
         if ($StatusLabel -and ($i % 20 -eq 0 -or $i -eq $total)) {
             $pct = [int]($i * 100 / [Math]::Max($total, 1))
             $StatusLabel.Text = (T 'mod.import.extracting' @($pct, $i, $total))
