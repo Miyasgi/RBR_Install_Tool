@@ -35,6 +35,15 @@ jobs:
             git push origin $tag
           }
 
+      - name: Inject version into script
+        shell: pwsh
+        run: |
+          $ver = "${{ github.event.inputs.version }}"
+          $file = "scripts/RBR_UI_Launcher.ps1"
+          (Get-Content $file -Raw) `
+            -replace "\`$script:AppVersion\s*=\s*'[^']*'", "`$script:AppVersion = '$ver'" |
+            Set-Content $file -Encoding UTF8
+
       - name: Package release ZIP
         shell: pwsh
         run: |
