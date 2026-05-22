@@ -51,16 +51,6 @@ if (-not (Test-Path (Join-Path $script:ProjectRoot "assets"))) {
     $script:ProjectRoot = $script:ScriptDir
 }
 
-$script:SingleInstanceMutex = $null
-try {
-    $createdNew = $false
-    $script:SingleInstanceMutex = New-Object System.Threading.Mutex($true, "Global\\RBR_Auto_Installer_SingleInstance", [ref]$createdNew)
-    if (-not $createdNew) {
-        Write-Host "[!] 检测到安装助手已在运行，本次启动已取消。" -ForegroundColor Yellow
-        exit 2
-    }
-} catch {}
-
 $defaultLogPath = Join-Path (Join-Path $script:ProjectRoot "logs") "RBR_Auto_Installer.log"
 $script:LogPath    = if ($LogPath) { $LogPath } else { $defaultLogPath }
 $script:StartTime  = Get-Date
@@ -471,23 +461,19 @@ function Wait-InstallerAndLaunch {
 
     while ((Get-Date) -lt $deadline) {
         $installerPath = Find-InstallerFromPaths -SearchPaths $SearchPaths
-        # 跳过脚本启动前就已存在且未变化的文件，防止误启动旧备份
-        # 例外：用户明确指定的 PreferredInstaller 不做此限制（已存在即可用）
+        # 跳过脚本启动前就已存在且未变化的文件，防止把旧备份误判为新下载
+        # PreferredInstaller 不豁免此检查 — 旧文件由 Test-QbtTorrentCompletedFallback 托底
         if ($installerPath -and $preExisting.ContainsKey($installerPath)) {
-            $isPreferred = ($PreferredInstaller -and
-                ([System.IO.Path]::GetFullPath($installerPath) -eq [System.IO.Path]::GetFullPath($PreferredInstaller)))
-            if (-not $isPreferred) {
-                $oldFp = $preExisting[$installerPath]
-                $isUpdated = $false
-                try {
-                    $curLen = [int64](Get-Item -Path $installerPath -ErrorAction Stop).Length
-                    if ($curLen -ne $oldFp.Length) { $isUpdated = $true }
-                } catch {}
-                if (-not $isUpdated) {
-                    $installerPath = $null
-                } else {
-                    Write-OK “检测到安装器文件已更新：$installerPath”
-                }
+            $oldFp = $preExisting[$installerPath]
+            $isUpdated = $false
+            try {
+                $curLen = [int64](Get-Item -Path $installerPath -ErrorAction Stop).Length
+                if ($curLen -ne $oldFp.Length) { $isUpdated = $true }
+            } catch {}
+            if (-not $isUpdated) {
+                $installerPath = $null
+            } else {
+                Write-OK “检测到安装器文件已更新：$installerPath”
             }
         }
         # 非 API 模式严格约束：必须先确认 torrent 完成，再允许启动安装器

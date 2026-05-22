@@ -7,3 +7,10 @@ release/
 # Runtime cache
 qbt_path.cache
 logs/
+
+# Large MOD archive and MODS folder (distributed separately via GitHub Releases / Baidu)
+JSGAME/*.zip
+JSGAME/MODS/
+
+# i18n pack zip — committed for bundling; only ignore future download caches
+# RBRi18n*.zip   ← intentionally NOT ignored so CI can package the stable release

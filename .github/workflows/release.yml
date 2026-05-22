@@ -35,11 +35,24 @@ jobs:
             git push origin $tag
           }
 
+      - name: Inject version into script
+        shell: pwsh
+        run: |
+          $ver = "${{ github.event.inputs.version }}"
+          $file = "scripts/RBR_UI_Launcher.ps1"
+          (Get-Content $file -Raw) `
+            -replace "\`$script:AppVersion\s*=\s*'[^']*'", "`$script:AppVersion = '$ver'" |
+            Set-Content $file -Encoding UTF8
+
       - name: Package release ZIP
         shell: pwsh
         run: |
           $ver = "${{ github.event.inputs.version }}"
-          $include = @("启动安装助手.bat", "RBR_Install_Assistant.exe", "README.md", "scripts", "assets")
+          $include = [System.Collections.Generic.List[string]]@(
+            "启动安装助手.bat", "RBR_Install_Assistant.exe", "README.md",
+            "scripts", "assets", "dist", "JSGAME"
+          )
+          Get-ChildItem -Filter "RBRi18n*.zip" | ForEach-Object { $include.Add($_.Name) }
           Compress-Archive -Path $include -DestinationPath "RBR_Install_Tool_${ver}.zip"
 
       - name: Create GitHub Release

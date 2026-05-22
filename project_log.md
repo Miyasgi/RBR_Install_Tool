@@ -470,6 +470,74 @@ EXE 原来用 `UseShellExecute = true` 启动 PowerShell，ShellExecuteEx 走 AN
 3. 工具本身不需要管理员权限时，不要用 `requireAdministrator` manifest，用 `asInvoker` 直接运行，避免 UAC 干扰用户体验。
 4. 如果脚本完全没有输出/日志，优先怀疑 PowerShell 解析阶段就失败了（语法/编码问题），而不是运行时错误。
 
+## 18) Session Update (2026-05-18) — MOD 管理器功能集成
+
+### 18.1 需求背景
+
+用户现有流程：手动解压 MOD 文件夹 → 拖到游戏根目录 → 运行 JSGME。对新手不友好。
+目标：把 MOD 管理器流程整合进现有 UI，加一个新 Tab。
+
+### 18.2 主要变更
+
+**scripts/RBR_UI_Launcher.ps1：**
+- Form 高度从 370 → 450
+- 新增 TabControl，两个 TabPage：
+  - Tab 1：游戏安装（原有所有控件迁移进来，`$form.Controls.Add` → `$tabPage1.Controls.Add`）
+  - Tab 2：MOD 管理器（全新）
+- Tab 2 布局（三步走）：
+  - 顶部：警告标签（请先装完游戏再用 MOD 管理器）+ 游戏根目录输入框（随 Tab 切换自动同步 Tab 1 路径）
+  - 第一步：本地导入（文件夹/ZIP）+ GitHub 下载 + 百度网盘下载（共 4 个按钮）
+  - 第二步：一键部署 JSGME 工具（Copy-Item "$jsGameDir\*" → 游戏根目录）
+  - 第三步：打开 JSGME（部署成功后按钮才可用）
+- Tab 切换事件：每次切到 Tab 2 都强制同步路径，不管是否为空
+- 新变量：`$jsGameDir`、`$jsgmeExeName`、`$script:ModsGithubUrl`、`$script:ModsBaiduUrl`
+- `Update-ModStatus` 函数：检测游戏目录是否有 JSGME EXE，控制第三步按钮状态
+- 双语 i18n 字符串：`tab.install`、`tab.mod`、`mod.*` 系列全部覆盖
+
+**JSGAME/ 目录：**
+- 新增 `JSGAME/JSGME MOD MANAGER.exe`（已提交进仓库）
+- 新增 `JSGAME/JSGME.ini`（`Name=MODS`，游戏目录 FullPath 为占位符）
+- `JSGAME/MODS/`：**不提交**（文件太大）
+
+**build.bat：**
+- 新增 JSGAME 文件复制逻辑：打包时把 `JSGME MOD MANAGER.exe` + `JSGME.ini` 复制进 ZIP
+- 不包含 MODS 文件夹（通过 GitHub Releases / 百度网盘分发）
+
+**.gitignore：**
+- 新增 `JSGAME/*.zip`（排除 RBR_MODS.zip）
+- 新增 `JSGAME/MODS/`（排除大型 MOD 文件夹）
+
+### 18.3 MOD 包分发方案
+
+- GitHub Releases：`https://github.com/Miyasgi/RBR_Install_Tool/releases/download/v2.0.1/RBR_MODS.zip`
+- 百度网盘（备用）：`https://pan.baidu.com/s/1ZiGbMfBat1Ok0I6nAU8Jxg?pwd=fxme`
+- UI 提示：优先 GitHub，无法访问再用百度
+
+### 18.4 关键设计决策
+
+| 决策 | 原因 |
+|------|------|
+| 部署时不做 JSGME 文件存在性校验 | 直接 Copy-Item，用户自己保证 JSGAME 目录内容正确 |
+| Tab 2 路径永远从 Tab 1 同步 | 避免两个 Tab 路径不一致导致部署错位置 |
+| MODS 文件夹不进 git | 110MB 二进制文件不适合 git，走 Releases 分发 |
+| JSGME.ini `Name=MODS` | 对应本地 MODS 文件夹名，确保 JSGME 找到正确目录 |
+
+### 18.5 当前状态
+
+- 分支：`feature-mod-installer`
+- 最新 commits：`bc8af7d`（MOD Manager 主功能）、`a150800`（加 GitHub 下载按钮）
+- 待完成：本地测试（start.bat）→ 通过后创建 PR 合并 main
+
+### 18.6 打包说明更新
+
+发布 ZIP 新增内容：
+- `JSGAME/JSGME MOD MANAGER.exe`
+- `JSGAME/JSGME.ini`
+
+不包含（通过外部链接分发）：
+- `JSGAME/MODS/`
+- `JSGAME/*.zip`
+
 ## 16) Session Update (2026-05-09)
 
 ### 16.1 Confirmed working

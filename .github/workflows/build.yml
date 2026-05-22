@@ -42,7 +42,7 @@ jobs:
             Select-Object -First 1
           if (-not $latest) { $latest = "v0.0.0" }
           $parts = ($latest -replace '^v','').Split('.')
-          $next = "v{0}.{1}.{2}" -f $parts[0], $parts[1], ([int]$parts[2] + 1)
+          $next = "v{0}.{1}.{2}" -f $parts[0], ([int]$parts[1] + 1), 0
           Write-Host "Latest: $latest  ->  Next: $next"
           echo "value=$next" >> $env:GITHUB_OUTPUT
 
@@ -52,11 +52,24 @@ jobs:
           git tag ${{ steps.ver.outputs.value }}
           git push origin ${{ steps.ver.outputs.value }}
 
+      - name: Inject version into script
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.ver.outputs.value }}"
+          $file = "scripts/RBR_UI_Launcher.ps1"
+          (Get-Content $file -Raw) `
+            -replace "\`$script:AppVersion\s*=\s*'[^']*'", "`$script:AppVersion = '$ver'" |
+            Set-Content $file -Encoding UTF8
+
       - name: Package release ZIP
         shell: pwsh
         run: |
           $ver = "${{ steps.ver.outputs.value }}"
-          $include = @("启动安装助手.bat", "RBR_Install_Assistant.exe", "README.md", "scripts", "assets")
+          $include = [System.Collections.Generic.List[string]]@(
+            "启动安装助手.bat", "RBR_Install_Assistant.exe", "README.md",
+            "scripts", "assets", "dist", "JSGAME"
+          )
+          Get-ChildItem -Filter "RBRi18n*.zip" | ForEach-Object { $include.Add($_.Name) }
           Compress-Archive -Path $include -DestinationPath "RBR_Install_Tool_${ver}.zip"
 
       - name: Create GitHub Release
