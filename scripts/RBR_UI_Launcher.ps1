@@ -1212,8 +1212,8 @@ $btnI18nUpdate.Add_Click({
 
 function Update-ModStatus {
     param([string]$GameRoot)
-    $jsgmeInRoot = Join-Path $GameRoot $jsgmeExeName
-    if (-not [string]::IsNullOrWhiteSpace($GameRoot) -and (Test-Path $jsgmeInRoot)) {
+    if (-not [string]::IsNullOrWhiteSpace($GameRoot) -and
+        (Test-Path (Join-Path $GameRoot $jsgmeExeName))) {
         $lblModJsgmeStatus.Text     = (T 'mod.jsgme.status.ok')
         $lblModJsgmeStatus.ForeColor = [System.Drawing.Color]::DarkGreen
         $btnModOpen.Enabled          = $true
