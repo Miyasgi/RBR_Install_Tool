@@ -41,7 +41,8 @@ $script:AppVersion = 'v2.1.0'
 $jsGameDir    = Join-Path $projectRoot 'JSGAME'
 $jsgmeExeName = 'JSGME MOD MANAGER.exe'
 # Fill in the Baidu Netdisk URL for the MODS pack before distributing:
-$script:ModsGithubUrl   = 'https://github.com/Miyasgi/RBR_Install_Tool/releases/download/v2.0.1/RBR_MODS.zip'
+$script:ModsGithubUrl    = 'https://github.com/Miyasgi/RBR_Install_Tool/releases/download/v2.2.1/RBR_MODS.zip'
+$script:ModsGithubSha256 = 'f83e3ac0da86cb8218a43e27563cac48422b412c6c0d551e9c38f707e4a64927'
 $script:ModsBaiduUrl    = 'https://pan.baidu.com/s/1ZiGbMfBat1Ok0I6nAU8Jxg?pwd=fxme'
 
 $script:AppIcon = $null
@@ -1128,13 +1129,19 @@ function Expand-ModZip {
     $i     = 0
     foreach ($entry in $zip.Entries) {
         $i++
-        if ($entry.FullName -match '[/\\]$') { continue }   # directory-only entry
+        # Skip directory entries and Windows system files that are often locked
+        if ($entry.FullName -match '[/\\]$') { continue }
+        if ($entry.Name -match '^(desktop\.ini|thumbs\.db|\.DS_Store)$') { continue }
         $destFile = Join-Path $DestPath $entry.FullName
         $destDir  = Split-Path $destFile -Parent
         if (-not (Test-Path $destDir)) {
             New-Item -Path $destDir -ItemType Directory -Force | Out-Null
         }
-        [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $destFile, $true)
+        try {
+            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $destFile, $true)
+        } catch {
+            # Skip files we can't write (locked system files, etc.) and continue
+        }
         if ($StatusLabel -and ($i % 20 -eq 0 -or $i -eq $total)) {
             $pct = [int]($i * 100 / [Math]::Max($total, 1))
             $StatusLabel.Text = (T 'mod.import.extracting' @($pct, $i, $total))
@@ -1486,6 +1493,24 @@ $btnModGithubDl.Add_Click({
         if (-not $fileOk) {
             $lblModImportStatus.Text = (T 'mod.dl.fail')
             return
+        }
+
+        # SHA256 verification (if a hash is configured)
+        $expectedHash = $script:ModsGithubSha256
+        if (-not [string]::IsNullOrWhiteSpace($expectedHash)) {
+            $lblModImportStatus.Text = '正在校验文件完整性...'
+            [System.Windows.Forms.Application]::DoEvents()
+            try {
+                $actualHash = (Get-FileHash -Path $tp2 -Algorithm SHA256).Hash.ToLower()
+                if ($actualHash -ne $expectedHash.ToLower()) {
+                    try { Remove-Item $tp2 -Force -ErrorAction SilentlyContinue } catch {}
+                    $lblModImportStatus.Text = "校验失败：文件已损坏，请重试（SHA256 不匹配）"
+                    $btnModGithubDl.Enabled = $true
+                    return
+                }
+            } catch {
+                # Hash check failed to run — non-fatal, proceed anyway
+            }
         }
 
         # Extract on UI thread with per-entry DoEvents
