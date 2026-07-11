@@ -59,7 +59,7 @@ jobs:
           $file = "scripts/RBR_UI_Launcher.ps1"
           (Get-Content $file -Raw) `
             -replace "\`$script:AppVersion\s*=\s*'[^']*'", "`$script:AppVersion = '$ver'" |
-            Set-Content $file -Encoding UTF8
+            Set-Content $file -Encoding utf8BOM
 
       - name: Package release ZIP
         shell: pwsh
