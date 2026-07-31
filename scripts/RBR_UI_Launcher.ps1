@@ -64,6 +64,12 @@ $script:Strings = @{
         'lbl.recommend'          = '新手建议：优先点这个按钮，自动下载并填好文件路径'
         'lbl.note1'              = '提示：安装器 EXE 不填也可以，脚本会自动查找。填了就优先用你选的版本。'
         'lbl.note2'              = '如果没有文件：点【官网下载】手动下载 torrent 和 exe，然后回到本窗口选择文件。'
+        'qb.status.ok'           = '✓ qBittorrent 已安装，可正常使用'
+        'qb.status.missing'      = '✗ 未检测到 qBittorrent — 请先安装后再点"开始"'
+        'qb.btn.dl'              = '下载 qBittorrent'
+        'welcome.title'          = '欢迎使用 RBR 安装助手'
+        'welcome.msg'            = "第一次使用？三步完成：`n`n① 安装 qBittorrent（若下方显示未安装，点右侧下载按钮）`n② 在本页点【自动下载】，等待游戏下载并安装`n③ 游戏装好后进【MOD 管理器】安装插件和汉化包`n`n之后打开不再显示此提示。"
+        'welcome.btn'            = '知道了，开始使用'
         'status.idle'            = '状态：等待操作'
         'status.fetching'        = '状态：正在读取官网链接...'
         'status.dl.torrent'      = '状态：正在下载 torrent...'
@@ -191,6 +197,12 @@ $script:Strings = @{
         'lbl.recommend'          = 'Beginners: click this first — downloads everything automatically'
         'lbl.note1'              = 'Tip: Installer EXE is optional, the script finds it automatically. Fill it to pin a version.'
         'lbl.note2'              = 'No files? Click [Official Site] to download manually, then select them here.'
+        'qb.status.ok'           = '✓ qBittorrent is installed — ready to use'
+        'qb.status.missing'      = '✗ qBittorrent not found — please install it before clicking Start'
+        'qb.btn.dl'              = 'Download qBittorrent'
+        'welcome.title'          = 'Welcome to RBR Install Assistant'
+        'welcome.msg'            = "First time? Three steps to finish:`n`n① Install qBittorrent (if the status bar shows missing, click the Download button)`n② Click [Auto Download] on this tab and wait for the game to install`n③ After the game installs, go to [MOD Manager] to add mods and localization`n`nThis message won't appear again."
+        'welcome.btn'            = 'Got it, let''s go'
         'status.idle'            = 'Status: Ready'
         'status.fetching'        = 'Status: Fetching links from official site...'
         'status.dl.torrent'      = 'Status: Downloading torrent...'
@@ -396,13 +408,46 @@ function Find-ExistingRbrPath {
     return $null
 }
 
+function Test-QBittorrentInstalled {
+    # Check common install locations
+    $exePaths = @(
+        "$env:ProgramFiles\qBittorrent\qbittorrent.exe",
+        "${env:ProgramFiles(x86)}\qBittorrent\qbittorrent.exe",
+        "$env:LOCALAPPDATA\Programs\qBittorrent\qbittorrent.exe"
+    )
+    foreach ($ep in $exePaths) {
+        if (Test-Path $ep) { return $true }
+    }
+    # Check add/remove programs registry
+    $regBases = @(
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall',
+        'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall'
+    )
+    foreach ($base in $regBases) {
+        try {
+            $hit = Get-ChildItem $base -ErrorAction SilentlyContinue |
+                Get-ItemProperty -ErrorAction SilentlyContinue |
+                Where-Object { $_.DisplayName -match 'qBittorrent' } |
+                Select-Object -First 1
+            if ($hit) { return $true }
+        } catch {}
+    }
+    return $false
+}
+
 $script:RbrStatePath = Join-Path $logDir 'rbr_state.json'
 
 function Save-RbrState {
-    param([string]$GameRoot)
+    param([hashtable]$Updates)
     try {
-        @{ gameRoot = $GameRoot } | ConvertTo-Json |
-            Set-Content $script:RbrStatePath -Encoding UTF8 -ErrorAction SilentlyContinue
+        $state = @{}
+        if (Test-Path $script:RbrStatePath) {
+            $existing = Get-Content $script:RbrStatePath -Raw -ErrorAction SilentlyContinue | ConvertFrom-Json
+            if ($existing) { $existing.PSObject.Properties | ForEach-Object { $state[$_.Name] = $_.Value } }
+        }
+        foreach ($k in $Updates.Keys) { $state[$k] = $Updates[$k] }
+        $state | ConvertTo-Json | Set-Content $script:RbrStatePath -Encoding UTF8 -ErrorAction SilentlyContinue
     } catch {}
 }
 
@@ -1120,6 +1165,21 @@ $lblStatus.Location = New-Object System.Drawing.Point(20, 312)
 $lblStatus.Size = New-Object System.Drawing.Size(730, 24)
 $tabPage1.Controls.Add($lblStatus)
 
+# qBittorrent status row — shown on startup, persists so user knows prerequisite state
+$lblQbStatus = New-Object System.Windows.Forms.Label
+$lblQbStatus.Location = New-Object System.Drawing.Point(20, 342)
+$lblQbStatus.Size     = New-Object System.Drawing.Size(560, 22)
+$tabPage1.Controls.Add($lblQbStatus)
+
+$btnQbDl = New-Object System.Windows.Forms.Button
+$btnQbDl.Text     = (T 'qb.btn.dl')
+$btnQbDl.Location = New-Object System.Drawing.Point(590, 339)
+$btnQbDl.Size     = New-Object System.Drawing.Size(150, 26)
+$btnQbDl.Add_Click({
+    try { Start-Process $qbtLatestDownloadUrl | Out-Null } catch {}
+})
+$tabPage1.Controls.Add($btnQbDl)
+
 $btnStart = New-Object System.Windows.Forms.Button
 $btnStart.Text = (T 'btn.start')
 $btnStart.Location = New-Object System.Drawing.Point(510, 270)
@@ -1677,7 +1737,7 @@ $btnModInstall.Add_Click({
         } else {
             $lblModInstallStatus.Text = (T 'mod.install.done')
         }
-        Save-RbrState -GameRoot $gameRoot
+        Save-RbrState -Updates @{ gameRoot = $gameRoot }
     } catch {
         $lblModInstallStatus.Text = (T 'mod.install.err' "$_")
     }
@@ -1870,8 +1930,27 @@ foreach ($d in $drives) { [void]$cmbDrive.Items.Add($d) }
 $script:AutoDetectedRbrPath = Find-ExistingRbrPath
 $savedState = Load-RbrState
 if ($savedState -and $savedState.gameRoot -and (Test-Path $savedState.gameRoot)) {
-    # Saved path takes priority over auto-detection
     $script:AutoDetectedRbrPath = $savedState.gameRoot
+}
+
+# qBittorrent prerequisite check
+$script:QbtInstalled = Test-QBittorrentInstalled
+if ($script:QbtInstalled) {
+    $lblQbStatus.Text      = (T 'qb.status.ok')
+    $lblQbStatus.ForeColor = [System.Drawing.Color]::DarkGreen
+    $btnQbDl.Visible       = $false
+} else {
+    $lblQbStatus.Text      = (T 'qb.status.missing')
+    $lblQbStatus.ForeColor = [System.Drawing.Color]::DarkRed
+    $btnQbDl.Visible       = $true
+}
+
+# First-run welcome dialog
+$isFirstRun = (-not $savedState) -or (-not $savedState.PSObject.Properties['firstRunDone']) -or (-not $savedState.firstRunDone)
+if ($isFirstRun) {
+    [System.Windows.Forms.MessageBox]::Show(
+        (T 'welcome.msg'), (T 'welcome.title'), 'OK', 'Information') | Out-Null
+    Save-RbrState -Updates @{ firstRunDone = $true }
 }
 
 $txtDownload.Text = Get-DefaultDownloadPath
@@ -1910,6 +1989,12 @@ function Apply-MainFormLanguage {
     $btnStart.Text     = (T 'btn.start')
     $btnCancel.Text    = (T 'btn.cancel')
     $lblStatus.Text    = (T 'status.idle')
+    $btnQbDl.Text      = (T 'qb.btn.dl')
+    if ($script:QbtInstalled) {
+        $lblQbStatus.Text = (T 'qb.status.ok')
+    } else {
+        $lblQbStatus.Text = (T 'qb.status.missing')
+    }
     $lblDriveHint.Text = Get-DriveHintText -Path $txtDownload.Text.Trim()
     $lblI18nTitle.Text    = (T 'i18n.step.title')
     $btnI18n.Text         = (T 'i18n.btn.install')
