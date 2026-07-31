@@ -405,16 +405,20 @@ function Get-DefaultDownloadPath {
 }
 
 # Scan common locations for an existing RBR installation.
+# Use .NET IO methods instead of Test-Path to avoid PowerShell provider
+# errors (null-path exceptions) on optical/network/removable drives.
 function Find-ExistingRbrPath {
     $drives = @('C','D','E','F','G','H')
     $subs   = @('RSF\RBR', 'Games\RBR', 'RBR', 'Program Files\RBR', 'game\RBR')
     foreach ($drv in $drives) {
         foreach ($sub in $subs) {
-            $p = "${drv}:\$sub"
-            if ((Test-Path (Join-Path $p 'RichardBurnsRally_SSE.exe')) -or
-                (Test-Path (Join-Path $p 'Plugins'))) {
-                return $p
-            }
+            try {
+                $p = [System.IO.Path]::Combine("${drv}:\", $sub)
+                if ([System.IO.File]::Exists([System.IO.Path]::Combine($p, 'RichardBurnsRally_SSE.exe')) -or
+                    [System.IO.Directory]::Exists([System.IO.Path]::Combine($p, 'Plugins'))) {
+                    return $p
+                }
+            } catch {}
         }
     }
     return $null
