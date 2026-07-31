@@ -181,6 +181,11 @@ $script:Strings = @{
         'i18n.err.noasset'       = '未找到可下载的汉化包文件，请检查网络'
         'i18n.err.nolocal'       = '未找到内置汉化包，请用右侧按钮从 GitHub 下载'
         'i18n.err.fail'          = '失败：{0}'
+        'notify.moddl.done.title'= 'MOD 包已就绪'
+        'notify.moddl.done.body' = 'MOD 包导入并部署完成，可在 MOD 管理器中启用插件了'
+        'notify.qb.found.title'  = 'qBittorrent 已就绪'
+        'notify.qb.found.body'   = 'qBittorrent 安装成功！现在可以点击【自动下载】继续'
+        'mod.auto.deploy'        = '正在自动部署 JSGME...'
     }
     en = @{
         'form.title'             = 'RBR Installer Assistant'
@@ -314,6 +319,11 @@ $script:Strings = @{
         'i18n.err.noasset'       = 'No zip asset found in latest release — check your network'
         'i18n.err.nolocal'       = 'Bundled pack not found. Use the GitHub button to download.'
         'i18n.err.fail'          = 'Failed: {0}'
+        'notify.moddl.done.title'= 'MOD Pack Ready'
+        'notify.moddl.done.body' = 'MOD pack imported and manager deployed. Go to MOD Manager tab to enable mods.'
+        'notify.qb.found.title'  = 'qBittorrent Ready'
+        'notify.qb.found.body'   = 'qBittorrent installed! You can now click [Auto Download] to continue.'
+        'mod.auto.deploy'        = 'Auto-deploying JSGME...'
     }
 }
 
@@ -458,6 +468,34 @@ function Load-RbrState {
         }
     } catch {}
     return $null
+}
+
+function Show-BalloonTip {
+    param([string]$Title, [string]$Text, [int]$Timeout = 6000)
+    try {
+        $script:NotifyIcon.BalloonTipTitle = $Title
+        $script:NotifyIcon.BalloonTipText  = $Text
+        $script:NotifyIcon.BalloonTipIcon  = [System.Windows.Forms.ToolTipIcon]::Info
+        $script:NotifyIcon.ShowBalloonTip($Timeout)
+    } catch {}
+}
+
+# Deploy JSGME tool into game folder silently (called automatically after MOD import).
+function Invoke-ModDeploy {
+    param([string]$GameRoot)
+    $jsgmeSrc = Join-Path $jsGameDir $jsgmeExeName
+    if (-not (Test-Path $jsgmeSrc)) { return }
+    try {
+        if (-not (Test-Path $GameRoot)) {
+            New-Item -Path $GameRoot -ItemType Directory -Force | Out-Null
+        }
+        Copy-Item -Path "$jsGameDir\*" -Destination $GameRoot -Recurse -Force
+        $jsgmeDest = Join-Path $GameRoot $jsgmeExeName
+        if (Test-Path $jsgmeDest) {
+            Update-ModStatus -GameRoot $GameRoot
+            Save-RbrState -Updates @{ gameRoot = $GameRoot }
+        }
+    } catch {}
 }
 
 function Get-DriveHintText {
@@ -924,12 +962,19 @@ function Show-RunMonitor {
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "$(T 'form.title')  $script:AppVersion"
 $form.StartPosition = "CenterScreen"
-$form.Size = New-Object System.Drawing.Size(780, 490)
+$form.Size = New-Object System.Drawing.Size(780, 560)
 $form.FormBorderStyle = "FixedDialog"
 $form.MaximizeBox = $false
 $form.MinimizeBox = $false
 $icon = Get-AppIcon
 if ($icon) { $form.Icon = $icon }
+
+# System-tray icon for balloon notifications — created once, disposed on close
+$script:NotifyIcon = New-Object System.Windows.Forms.NotifyIcon
+$script:NotifyIcon.Text = (T 'form.title')
+$appIconForNotify = Get-AppIcon
+$script:NotifyIcon.Icon = if ($appIconForNotify) { $appIconForNotify } else { [System.Drawing.SystemIcons]::Application }
+$script:NotifyIcon.Visible = $true
 
 $tabControl = New-Object System.Windows.Forms.TabControl
 $tabControl.Dock = [System.Windows.Forms.DockStyle]::Fill
@@ -1165,18 +1210,44 @@ $lblStatus.Location = New-Object System.Drawing.Point(20, 312)
 $lblStatus.Size = New-Object System.Drawing.Size(730, 24)
 $tabPage1.Controls.Add($lblStatus)
 
-# qBittorrent status row — shown on startup, persists so user knows prerequisite state
+# Marquee progress bar shown while auto-download is running
+$pbAutoDownload = New-Object System.Windows.Forms.ProgressBar
+$pbAutoDownload.Location = New-Object System.Drawing.Point(20, 340)
+$pbAutoDownload.Size     = New-Object System.Drawing.Size(730, 14)
+$pbAutoDownload.Style    = [System.Windows.Forms.ProgressBarStyle]::Marquee
+$pbAutoDownload.MarqueeAnimationSpeed = 35
+$pbAutoDownload.Visible  = $false
+$tabPage1.Controls.Add($pbAutoDownload)
+
+# qBittorrent status row (y=360, clear of the progress bar)
 $lblQbStatus = New-Object System.Windows.Forms.Label
-$lblQbStatus.Location = New-Object System.Drawing.Point(20, 342)
+$lblQbStatus.Location = New-Object System.Drawing.Point(20, 360)
 $lblQbStatus.Size     = New-Object System.Drawing.Size(560, 22)
 $tabPage1.Controls.Add($lblQbStatus)
 
+$script:QbtPollTimer = $null
+
 $btnQbDl = New-Object System.Windows.Forms.Button
 $btnQbDl.Text     = (T 'qb.btn.dl')
-$btnQbDl.Location = New-Object System.Drawing.Point(590, 339)
+$btnQbDl.Location = New-Object System.Drawing.Point(590, 357)
 $btnQbDl.Size     = New-Object System.Drawing.Size(150, 26)
 $btnQbDl.Add_Click({
     try { Start-Process $qbtLatestDownloadUrl | Out-Null } catch {}
+    # Poll every 8 s — update status automatically once qB is installed
+    if ($script:QbtPollTimer) { try { $script:QbtPollTimer.Stop() } catch {} }
+    $script:QbtPollTimer = New-Object System.Windows.Forms.Timer
+    $script:QbtPollTimer.Interval = 8000
+    $script:QbtPollTimer.Add_Tick({
+        if (Test-QBittorrentInstalled) {
+            $script:QbtPollTimer.Stop()
+            $script:QbtInstalled   = $true
+            $lblQbStatus.Text      = (T 'qb.status.ok')
+            $lblQbStatus.ForeColor = [System.Drawing.Color]::DarkGreen
+            $btnQbDl.Visible       = $false
+            Show-BalloonTip -Title (T 'notify.qb.found.title') -Text (T 'notify.qb.found.body')
+        }
+    })
+    $script:QbtPollTimer.Start()
 })
 $tabPage1.Controls.Add($btnQbDl)
 
@@ -1218,7 +1289,8 @@ function Expand-ModZip {
     param(
         [string]$ZipPath,
         [string]$DestPath,
-        [System.Windows.Forms.Label]$StatusLabel = $null
+        [System.Windows.Forms.Label]$StatusLabel = $null,
+        [System.Windows.Forms.ProgressBar]$ProgressBar = $null
     )
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zip   = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
@@ -1239,9 +1311,10 @@ function Expand-ModZip {
         } catch {
             # Skip files we can't write (locked system files, etc.) and continue
         }
-        if ($StatusLabel -and ($i % 20 -eq 0 -or $i -eq $total)) {
+        if (($StatusLabel -or $ProgressBar) -and ($i % 20 -eq 0 -or $i -eq $total)) {
             $pct = [int]($i * 100 / [Math]::Max($total, 1))
-            $StatusLabel.Text = (T 'mod.import.extracting' @($pct, $i, $total))
+            if ($StatusLabel) { $StatusLabel.Text = (T 'mod.import.extracting' @($pct, $i, $total)) }
+            if ($ProgressBar)  { $ProgressBar.Value = [math]::Min(100, $pct) }
             [System.Windows.Forms.Application]::DoEvents()
         }
     }
@@ -1250,31 +1323,31 @@ function Expand-ModZip {
 
 $sepI18n = New-Object System.Windows.Forms.Label
 $sepI18n.BorderStyle = [System.Windows.Forms.BorderStyle]::Fixed3D
-$sepI18n.Location    = New-Object System.Drawing.Point(12, 344)
+$sepI18n.Location    = New-Object System.Drawing.Point(12, 392)
 $sepI18n.Size        = New-Object System.Drawing.Size(740, 2)
 $tabPage1.Controls.Add($sepI18n)
 
 $lblI18nTitle = New-Object System.Windows.Forms.Label
 $lblI18nTitle.Text     = (T 'i18n.step.title')
-$lblI18nTitle.Location = New-Object System.Drawing.Point(20, 354)
+$lblI18nTitle.Location = New-Object System.Drawing.Point(20, 402)
 $lblI18nTitle.Size     = New-Object System.Drawing.Size(740, 20)
 $lblI18nTitle.Font     = New-Object System.Drawing.Font($form.Font, [System.Drawing.FontStyle]::Bold)
 $tabPage1.Controls.Add($lblI18nTitle)
 
 $btnI18n = New-Object System.Windows.Forms.Button
 $btnI18n.Text     = (T 'i18n.btn.install')
-$btnI18n.Location = New-Object System.Drawing.Point(20, 378)
+$btnI18n.Location = New-Object System.Drawing.Point(20, 426)
 $btnI18n.Size     = New-Object System.Drawing.Size(163, 34)
 $tabPage1.Controls.Add($btnI18n)
 
 $btnI18nUpdate = New-Object System.Windows.Forms.Button
 $btnI18nUpdate.Text     = (T 'i18n.btn.update')
-$btnI18nUpdate.Location = New-Object System.Drawing.Point(191, 378)
+$btnI18nUpdate.Location = New-Object System.Drawing.Point(191, 426)
 $btnI18nUpdate.Size     = New-Object System.Drawing.Size(130, 34)
 $tabPage1.Controls.Add($btnI18nUpdate)
 
 $lblI18nStatus = New-Object System.Windows.Forms.Label
-$lblI18nStatus.Location = New-Object System.Drawing.Point(330, 385)
+$lblI18nStatus.Location = New-Object System.Drawing.Point(330, 433)
 $lblI18nStatus.Size     = New-Object System.Drawing.Size(420, 20)
 $tabPage1.Controls.Add($lblI18nStatus)
 
@@ -1481,25 +1554,32 @@ $btnModImportZip.Add_Click({
     $btnModImportZip.Enabled    = $false
     $btnModImportFolder.Enabled = $false
     $btnModGithubDl.Enabled     = $false
+    $pbModDl.Value   = 0
+    $pbModDl.Style   = [System.Windows.Forms.ProgressBarStyle]::Continuous
+    $pbModDl.Visible = $true
     $lblModImportStatus.Text = (T 'mod.import.doing')
     [System.Windows.Forms.Application]::DoEvents()
     try {
-        Expand-ModZip -ZipPath $dlg.FileName -DestPath $gameRoot -StatusLabel $lblModImportStatus
+        Expand-ModZip -ZipPath $dlg.FileName -DestPath $gameRoot -StatusLabel $lblModImportStatus -ProgressBar $pbModDl
         # Validate that something was actually extracted
         $modsFolder = Join-Path $gameRoot 'MODS'
         $hasContent = (Test-Path $modsFolder) -and (Get-ChildItem -Path $modsFolder -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1)
-        if ($hasContent) {
+        if ($hasContent -or (Get-ChildItem -Path $gameRoot -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1)) {
+            $pbModDl.Visible         = $false
             $lblModImportStatus.Text = (T 'mod.import.done')
+            # Auto-deploy JSGME so user doesn't need to click Step 2
+            $lblModInstallStatus.Text = (T 'mod.auto.deploy')
+            [System.Windows.Forms.Application]::DoEvents()
+            Invoke-ModDeploy -GameRoot $gameRoot
+            $hasModsContent = (Test-Path $modsFolder) -and ($null -ne (Get-ChildItem -Path $modsFolder -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1))
+            $lblModInstallStatus.Text = if ($hasModsContent) { (T 'mod.install.done') } else { (T 'mod.install.warn.nomods') }
+            Show-BalloonTip -Title (T 'notify.moddl.done.title') -Text (T 'notify.moddl.done.body')
         } else {
-            # Maybe the ZIP root has content but not under MODS/ — count any extracted files
-            $anyFile = Get-ChildItem -Path $gameRoot -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($anyFile) {
-                $lblModImportStatus.Text = (T 'mod.import.done')
-            } else {
-                $lblModImportStatus.Text = (T 'mod.import.err' '解压后目录为空，请确认 ZIP 文件内容')
-            }
+            $pbModDl.Visible         = $false
+            $lblModImportStatus.Text = (T 'mod.import.err' '解压后目录为空，请确认 ZIP 文件内容')
         }
     } catch {
+        $pbModDl.Visible         = $false
         $lblModImportStatus.Text = (T 'mod.import.err' "$_")
     } finally {
         $btnModImportZip.Enabled    = $true
@@ -1568,6 +1648,10 @@ $btnModGithubDl.Add_Click({
         $wc.DownloadFile($url, $dest)
     } -ArgumentList $dlUrl, $tmpZip
 
+    $pbModDl.Value   = 0
+    $pbModDl.Style   = [System.Windows.Forms.ProgressBarStyle]::Continuous
+    $pbModDl.Visible = $true
+
     # WinForms Timer polls on UI thread — safe to update controls directly
     $script:ModsDlTimer = New-Object System.Windows.Forms.Timer
     $script:ModsDlTimer.Interval = 800
@@ -1585,6 +1669,7 @@ $btnModGithubDl.Add_Click({
                     if ($tot -gt 0) {
                         $pct = [math]::Min(99, [int]($mb * 100 / $tot))
                         $lblModImportStatus.Text = (T 'mod.dl.progress.pct' @($mb, $tot, $pct))
+                        $pbModDl.Value = $pct
                     } else {
                         $lblModImportStatus.Text = (T 'mod.dl.progress' "$mb")
                     }
@@ -1608,6 +1693,7 @@ $btnModGithubDl.Add_Click({
         $tp2 = $script:ModsDlTmpPath
         $fileOk = $tp2 -and (Test-Path $tp2) -and ((Get-Item $tp2 -ErrorAction SilentlyContinue).Length -gt 10240)
         if (-not $fileOk) {
+            $pbModDl.Visible         = $false
             $lblModImportStatus.Text = (T 'mod.dl.fail')
             return
         }
@@ -1621,8 +1707,9 @@ $btnModGithubDl.Add_Click({
                 $actualHash = (Get-FileHash -Path $tp2 -Algorithm SHA256).Hash.ToLower()
                 if ($actualHash -ne $expectedHash.ToLower()) {
                     try { Remove-Item $tp2 -Force -ErrorAction SilentlyContinue } catch {}
+                    $pbModDl.Visible         = $false
                     $lblModImportStatus.Text = "校验失败：文件已损坏，请重试（SHA256 不匹配）"
-                    $btnModGithubDl.Enabled = $true
+                    $btnModGithubDl.Enabled  = $true
                     return
                 }
             } catch {
@@ -1632,12 +1719,23 @@ $btnModGithubDl.Add_Click({
 
         # Extract on UI thread with per-entry DoEvents
         $gr = $txtModRoot.Text.Trim()
+        $pbModDl.Value           = 0
         $lblModImportStatus.Text = (T 'mod.dl.extracting')
         [System.Windows.Forms.Application]::DoEvents()
         try {
-            Expand-ModZip -ZipPath $tp2 -DestPath $gr -StatusLabel $lblModImportStatus
+            Expand-ModZip -ZipPath $tp2 -DestPath $gr -StatusLabel $lblModImportStatus -ProgressBar $pbModDl
+            $pbModDl.Visible         = $false
             $lblModImportStatus.Text = (T 'mod.dl.done')
+            # Auto-deploy JSGME so user doesn't need to click Step 2
+            $lblModInstallStatus.Text = (T 'mod.auto.deploy')
+            [System.Windows.Forms.Application]::DoEvents()
+            Invoke-ModDeploy -GameRoot $gr
+            $modsFolder = Join-Path $gr 'MODS'
+            $hasContent = (Test-Path $modsFolder) -and ($null -ne (Get-ChildItem -Path $modsFolder -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1))
+            $lblModInstallStatus.Text = if ($hasContent) { (T 'mod.install.done') } else { (T 'mod.install.warn.nomods') }
+            Show-BalloonTip -Title (T 'notify.moddl.done.title') -Text (T 'notify.moddl.done.body')
         } catch {
+            $pbModDl.Visible         = $false
             $lblModImportStatus.Text = (T 'mod.import.err' "$_")
         }
         try { Remove-Item $tp2 -Force -ErrorAction SilentlyContinue } catch {}
@@ -1670,28 +1768,38 @@ $lblModImportStatus.Location = New-Object System.Drawing.Point(28, 192)
 $lblModImportStatus.Size     = New-Object System.Drawing.Size(700, 18)
 $tabPage2.Controls.Add($lblModImportStatus)
 
+# Progress bar for MOD download/extraction (hidden until download starts)
+$pbModDl = New-Object System.Windows.Forms.ProgressBar
+$pbModDl.Location = New-Object System.Drawing.Point(28, 213)
+$pbModDl.Size     = New-Object System.Drawing.Size(700, 14)
+$pbModDl.Minimum  = 0
+$pbModDl.Maximum  = 100
+$pbModDl.Value    = 0
+$pbModDl.Visible  = $false
+$tabPage2.Controls.Add($pbModDl)
+
 $sep2 = New-Object System.Windows.Forms.Label
 $sep2.BorderStyle = [System.Windows.Forms.BorderStyle]::Fixed3D
-$sep2.Location    = New-Object System.Drawing.Point(12, 216)
+$sep2.Location    = New-Object System.Drawing.Point(12, 234)
 $sep2.Size        = New-Object System.Drawing.Size(740, 2)
 $tabPage2.Controls.Add($sep2)
 
 $lblModStep2 = New-Object System.Windows.Forms.Label
 $lblModStep2.Text     = (T 'mod.step2.title')
-$lblModStep2.Location = New-Object System.Drawing.Point(12, 226)
+$lblModStep2.Location = New-Object System.Drawing.Point(12, 244)
 $lblModStep2.Size     = New-Object System.Drawing.Size(740, 20)
 $lblModStep2.Font     = New-Object System.Drawing.Font($form.Font, [System.Drawing.FontStyle]::Bold)
 $tabPage2.Controls.Add($lblModStep2)
 
 $btnModInstall = New-Object System.Windows.Forms.Button
 $btnModInstall.Text     = (T 'mod.btn.install')
-$btnModInstall.Location = New-Object System.Drawing.Point(28, 251)
+$btnModInstall.Location = New-Object System.Drawing.Point(28, 269)
 $btnModInstall.Size     = New-Object System.Drawing.Size(200, 32)
 $tabPage2.Controls.Add($btnModInstall)
 
 $lblModInstallStatus = New-Object System.Windows.Forms.Label
 $lblModInstallStatus.Text     = (T 'mod.install.status')
-$lblModInstallStatus.Location = New-Object System.Drawing.Point(240, 260)
+$lblModInstallStatus.Location = New-Object System.Drawing.Point(240, 278)
 $lblModInstallStatus.Size     = New-Object System.Drawing.Size(490, 18)
 $tabPage2.Controls.Add($lblModInstallStatus)
 
@@ -1745,20 +1853,20 @@ $btnModInstall.Add_Click({
 
 $sep3 = New-Object System.Windows.Forms.Label
 $sep3.BorderStyle = [System.Windows.Forms.BorderStyle]::Fixed3D
-$sep3.Location    = New-Object System.Drawing.Point(12, 297)
+$sep3.Location    = New-Object System.Drawing.Point(12, 315)
 $sep3.Size        = New-Object System.Drawing.Size(740, 2)
 $tabPage2.Controls.Add($sep3)
 
 $lblModStep3 = New-Object System.Windows.Forms.Label
 $lblModStep3.Text     = (T 'mod.step3.title')
-$lblModStep3.Location = New-Object System.Drawing.Point(12, 307)
+$lblModStep3.Location = New-Object System.Drawing.Point(12, 325)
 $lblModStep3.Size     = New-Object System.Drawing.Size(740, 20)
 $lblModStep3.Font     = New-Object System.Drawing.Font($form.Font, [System.Drawing.FontStyle]::Bold)
 $tabPage2.Controls.Add($lblModStep3)
 
 $btnModOpen = New-Object System.Windows.Forms.Button
 $btnModOpen.Text     = (T 'mod.btn.open')
-$btnModOpen.Location = New-Object System.Drawing.Point(28, 332)
+$btnModOpen.Location = New-Object System.Drawing.Point(28, 350)
 $btnModOpen.Size     = New-Object System.Drawing.Size(240, 32)
 $btnModOpen.Enabled  = $false
 $btnModOpen.Add_Click({
@@ -1799,6 +1907,7 @@ $btnAutoDownload.Add_Click({
     $form.UseWaitCursor = $true
     $btnAutoDownload.Enabled = $false
     $btnStart.Enabled = $false
+    $pbAutoDownload.Visible = $true
     $lblStatus.Text = (T 'status.fetching')
     [System.Windows.Forms.Application]::DoEvents()
 
@@ -1822,9 +1931,12 @@ $btnAutoDownload.Add_Click({
         $txtTorrent.Text = $torrentPath
         $txtInstaller.Text = $exePath
 
+        $pbAutoDownload.Style = [System.Windows.Forms.ProgressBarStyle]::Continuous
+        $pbAutoDownload.Value = 100
         $lblStatus.Text = (T 'status.dl.done')
         [System.Windows.Forms.MessageBox]::Show((T 'dlg.dl.done'), (T 'mon.popup.seeding.title'), "OK", "Information") | Out-Null
     } catch {
+        $pbAutoDownload.Visible = $false
         $lblStatus.Text = (T 'status.dl.fail')
         [System.Windows.Forms.MessageBox]::Show((T 'dlg.dl.fail' "$_"), (T 'mon.popup.seeding.title'), "OK", "Warning") | Out-Null
     } finally {
@@ -2038,6 +2150,13 @@ $tabControl.Add_SelectedIndexChanged({
         }
         Update-ModStatus -GameRoot $txtModRoot.Text.Trim()
     }
+})
+
+# Dispose NotifyIcon and stop background timers when the main form closes
+$form.Add_FormClosed({
+    try { $script:NotifyIcon.Visible = $false; $script:NotifyIcon.Dispose() } catch {}
+    try { if ($script:QbtPollTimer) { $script:QbtPollTimer.Stop(); $script:QbtPollTimer.Dispose() } } catch {}
+    try { if ($script:ModsDlTimer)  { $script:ModsDlTimer.Stop()  } } catch {}
 })
 
 # ─── 底部开发者信息条（两个 Tab 均可见）────────────────────────────────────────
