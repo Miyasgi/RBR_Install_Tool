@@ -41,9 +41,10 @@ $script:AppVersion = 'v2.1.0'
 $jsGameDir    = Join-Path $projectRoot 'JSGAME'
 $jsgmeExeName = 'JSGME MOD MANAGER.exe'
 # Fill in the Baidu Netdisk URL for the MODS pack before distributing:
+$script:ModsGiteeUrl     = 'https://gitee.com/Miyasgi/RBR_Install_Tool/releases/download/v2.2.1/RBR_MODS.zip'
 $script:ModsGithubUrl    = 'https://github.com/Miyasgi/RBR_Install_Tool/releases/download/v2.2.1/RBR_MODS.zip'
 $script:ModsGithubSha256 = 'f83e3ac0da86cb8218a43e27563cac48422b412c6c0d551e9c38f707e4a64927'
-$script:ModsBaiduUrl    = 'https://pan.baidu.com/s/1ZiGbMfBat1Ok0I6nAU8Jxg?pwd=fxme'
+$script:ModsBaiduUrl     = 'https://pan.baidu.com/s/1ZiGbMfBat1Ok0I6nAU8Jxg?pwd=fxme'
 
 $script:AppIcon = $null
 $script:LangCode = 'zh'
@@ -138,7 +139,7 @@ $script:Strings = @{
         'mod.step1.note'         = '已有文件可直接本地导入；若需下载：优先 GitHub，无法访问再用百度网盘。'
         'mod.btn.importfolder'   = '本地导入（文件夹）'
         'mod.btn.importzip'      = '本地导入（ZIP）'
-        'mod.btn.githubdl'       = 'GitHub 下载'
+        'mod.btn.githubdl'       = '在线下载'
         'mod.btn.baidudl'        = '百度网盘下载'
         'mod.import.status'      = '导入状态：等待'
         'mod.import.doing'       = '导入状态：正在复制，请稍候...'
@@ -276,7 +277,7 @@ $script:Strings = @{
         'mod.step1.note'         = 'Have the files? Import locally. Need to download? Try GitHub first; use Baidu if GitHub is inaccessible.'
         'mod.btn.importfolder'   = 'Import folder'
         'mod.btn.importzip'      = 'Import ZIP'
-        'mod.btn.githubdl'       = 'GitHub Download'
+        'mod.btn.githubdl'       = 'Download Online'
         'mod.btn.baidudl'        = 'Baidu Netdisk'
         'mod.import.status'      = 'Import: waiting'
         'mod.import.doing'       = 'Import: copying, please wait...'
@@ -1613,7 +1614,6 @@ $btnModGithubDl.Add_Click({
 
     $tmpZip = Join-Path $env:TEMP 'RBR_MODS_download.zip'
     $script:ModsDlTmpPath = $tmpZip
-    $dlUrl  = $script:ModsGithubUrl
 
     # Disable all Step-1 buttons while downloading
     $btnModGithubDl.Enabled     = $false
@@ -1626,18 +1626,40 @@ $btnModGithubDl.Add_Click({
     # Remove stale temp file
     try { if (Test-Path $tmpZip) { Remove-Item $tmpZip -Force -ErrorAction SilentlyContinue } } catch {}
 
-    # HEAD request to get total file size for progress %
+    # Auto-select download source: try Gitee first (no VPN), fall back to GitHub
+    $dlUrl = $script:ModsGithubUrl
     $script:ModsDlTotalMB = 0
-    try {
-        $req = [System.Net.HttpWebRequest]::Create([uri]$dlUrl)
-        $req.Method    = 'HEAD'
-        $req.Timeout   = 5000
-        $req.UserAgent = 'Mozilla/5.0'
-        $resp = $req.GetResponse()
-        $cl   = $resp.ContentLength
-        $resp.Close()
-        if ($cl -gt 0) { $script:ModsDlTotalMB = [math]::Round($cl / 1MB, 1) }
-    } catch {}
+    if (-not [string]::IsNullOrWhiteSpace($script:ModsGiteeUrl)) {
+        try {
+            $chk = [System.Net.HttpWebRequest]::Create([uri]$script:ModsGiteeUrl)
+            $chk.Method = 'HEAD'; $chk.Timeout = 3000; $chk.UserAgent = 'Mozilla/5.0'
+            $chkResp = $chk.GetResponse()
+            $cl2 = $chkResp.ContentLength
+            $chkResp.Close()
+            $dlUrl = $script:ModsGiteeUrl
+            if ($cl2 -gt 0) { $script:ModsDlTotalMB = [math]::Round($cl2 / 1MB, 1) }
+        } catch {
+            # Gitee unreachable — use GitHub; get file size from GitHub HEAD
+            try {
+                $req = [System.Net.HttpWebRequest]::Create([uri]$dlUrl)
+                $req.Method = 'HEAD'; $req.Timeout = 5000; $req.UserAgent = 'Mozilla/5.0'
+                $resp = $req.GetResponse()
+                $cl   = $resp.ContentLength
+                $resp.Close()
+                if ($cl -gt 0) { $script:ModsDlTotalMB = [math]::Round($cl / 1MB, 1) }
+            } catch {}
+        }
+    } else {
+        # No Gitee URL configured — GitHub HEAD for file size
+        try {
+            $req = [System.Net.HttpWebRequest]::Create([uri]$dlUrl)
+            $req.Method = 'HEAD'; $req.Timeout = 5000; $req.UserAgent = 'Mozilla/5.0'
+            $resp = $req.GetResponse()
+            $cl   = $resp.ContentLength
+            $resp.Close()
+            if ($cl -gt 0) { $script:ModsDlTotalMB = [math]::Round($cl / 1MB, 1) }
+        } catch {}
+    }
 
     # Background download job (separate PS process — no UI access needed)
     $script:ModsDlJob = Start-Job -ScriptBlock {
