@@ -158,6 +158,7 @@ $script:Strings = @{
         'mod.import.extracting'  = '正在解压... {0}% ({1}/{2})'
         'mod.dl.starting'        = '正在连接 GitHub，请稍候...'
         'mod.dl.progress'        = '正在下载... {0} MB'
+        'mod.dl.progress.pct'    = '正在下载... {0} MB / {1} MB ({2}%)'
         'mod.dl.extracting'      = '下载完成，正在解压...'
         'mod.dl.done'            = '✓ MOD 包下载并导入完成'
         'mod.dl.fail'            = '下载失败，请检查网络或改用百度网盘下载后本地导入'
@@ -284,6 +285,7 @@ $script:Strings = @{
         'mod.import.extracting'  = 'Extracting... {0}% ({1}/{2})'
         'mod.dl.starting'        = 'Connecting to GitHub, please wait...'
         'mod.dl.progress'        = 'Downloading... {0} MB'
+        'mod.dl.progress.pct'    = 'Downloading... {0} MB / {1} MB ({2}%)'
         'mod.dl.extracting'      = 'Download complete, extracting...'
         'mod.dl.done'            = '✓ MOD pack downloaded and imported'
         'mod.dl.fail'            = 'Download failed. Check network or use Baidu Netdisk and import locally.'
@@ -376,6 +378,41 @@ function Get-DefaultDownloadPath {
         }
     } catch {}
     return "E:\RBR"
+}
+
+# Scan common locations for an existing RBR installation.
+function Find-ExistingRbrPath {
+    $drives = @('C','D','E','F','G','H')
+    $subs   = @('RSF\RBR', 'Games\RBR', 'RBR', 'Program Files\RBR', 'game\RBR')
+    foreach ($drv in $drives) {
+        foreach ($sub in $subs) {
+            $p = "${drv}:\$sub"
+            if ((Test-Path (Join-Path $p 'RichardBurnsRally_SSE.exe')) -or
+                (Test-Path (Join-Path $p 'Plugins'))) {
+                return $p
+            }
+        }
+    }
+    return $null
+}
+
+$script:RbrStatePath = Join-Path $logDir 'rbr_state.json'
+
+function Save-RbrState {
+    param([string]$GameRoot)
+    try {
+        @{ gameRoot = $GameRoot } | ConvertTo-Json |
+            Set-Content $script:RbrStatePath -Encoding UTF8 -ErrorAction SilentlyContinue
+    } catch {}
+}
+
+function Load-RbrState {
+    try {
+        if (Test-Path $script:RbrStatePath) {
+            return (Get-Content $script:RbrStatePath -Raw -ErrorAction SilentlyContinue | ConvertFrom-Json)
+        }
+    } catch {}
+    return $null
 }
 
 function Get-DriveHintText {
@@ -1416,9 +1453,10 @@ $btnModGithubDl = New-Object System.Windows.Forms.Button
 $btnModGithubDl.Text     = (T 'mod.btn.githubdl')
 $btnModGithubDl.Location = New-Object System.Drawing.Point(298, 156)
 $btnModGithubDl.Size     = New-Object System.Drawing.Size(116, 30)
-$script:ModsDlJob     = $null
-$script:ModsDlTmpPath = $null
-$script:ModsDlTimer   = $null
+$script:ModsDlJob      = $null
+$script:ModsDlTmpPath  = $null
+$script:ModsDlTimer    = $null
+$script:ModsDlTotalMB  = 0
 
 $btnModGithubDl.Add_Click({
     if ([string]::IsNullOrWhiteSpace($script:ModsGithubUrl)) {
@@ -1448,6 +1486,19 @@ $btnModGithubDl.Add_Click({
     # Remove stale temp file
     try { if (Test-Path $tmpZip) { Remove-Item $tmpZip -Force -ErrorAction SilentlyContinue } } catch {}
 
+    # HEAD request to get total file size for progress %
+    $script:ModsDlTotalMB = 0
+    try {
+        $req = [System.Net.HttpWebRequest]::Create([uri]$dlUrl)
+        $req.Method    = 'HEAD'
+        $req.Timeout   = 5000
+        $req.UserAgent = 'Mozilla/5.0'
+        $resp = $req.GetResponse()
+        $cl   = $resp.ContentLength
+        $resp.Close()
+        if ($cl -gt 0) { $script:ModsDlTotalMB = [math]::Round($cl / 1MB, 1) }
+    } catch {}
+
     # Background download job (separate PS process — no UI access needed)
     $script:ModsDlJob = Start-Job -ScriptBlock {
         param($url, $dest)
@@ -1469,8 +1520,14 @@ $btnModGithubDl.Add_Click({
             $tp = $script:ModsDlTmpPath
             if ($tp -and (Test-Path $tp)) {
                 try {
-                    $mb = [math]::Round((Get-Item $tp -ErrorAction Stop).Length / 1MB, 1)
-                    $lblModImportStatus.Text = (T 'mod.dl.progress' "$mb")
+                    $mb  = [math]::Round((Get-Item $tp -ErrorAction Stop).Length / 1MB, 1)
+                    $tot = $script:ModsDlTotalMB
+                    if ($tot -gt 0) {
+                        $pct = [math]::Min(99, [int]($mb * 100 / $tot))
+                        $lblModImportStatus.Text = (T 'mod.dl.progress.pct' @($mb, $tot, $pct))
+                    } else {
+                        $lblModImportStatus.Text = (T 'mod.dl.progress' "$mb")
+                    }
                 } catch {}
             }
             return
@@ -1620,6 +1677,7 @@ $btnModInstall.Add_Click({
         } else {
             $lblModInstallStatus.Text = (T 'mod.install.done')
         }
+        Save-RbrState -GameRoot $gameRoot
     } catch {
         $lblModInstallStatus.Text = (T 'mod.install.err' "$_")
     }
@@ -1808,7 +1866,19 @@ if (Test-Path $defaultInstaller) { $txtInstaller.Text = $defaultInstaller }
 $drives = Get-SelectableDrives
 foreach ($d in $drives) { [void]$cmbDrive.Items.Add($d) }
 
+# Startup: scan for existing RBR installation and load saved state
+$script:AutoDetectedRbrPath = Find-ExistingRbrPath
+$savedState = Load-RbrState
+if ($savedState -and $savedState.gameRoot -and (Test-Path $savedState.gameRoot)) {
+    # Saved path takes priority over auto-detection
+    $script:AutoDetectedRbrPath = $savedState.gameRoot
+}
+
 $txtDownload.Text = Get-DefaultDownloadPath
+# If we have a confirmed existing game path, use it for Tab1 download path too
+if ($script:AutoDetectedRbrPath -and (Test-Path $script:AutoDetectedRbrPath)) {
+    $txtDownload.Text = $script:AutoDetectedRbrPath
+}
 $defaultRoot = ""
 try { $defaultRoot = [System.IO.Path]::GetPathRoot($txtDownload.Text).TrimEnd('\\') } catch {}
 if ($defaultRoot -and $cmbDrive.Items.Contains($defaultRoot)) {
@@ -1870,7 +1940,17 @@ $cmbLang.Add_SelectedIndexChanged({
 
 $tabControl.Add_SelectedIndexChanged({
     if ($tabControl.SelectedIndex -eq 1) {
-        $txtModRoot.Text = $txtDownload.Text.Trim()
+        # Only auto-fill when user hasn't typed anything
+        if ([string]::IsNullOrWhiteSpace($txtModRoot.Text)) {
+            $fill = $txtDownload.Text.Trim()
+            # Fallback: saved state or auto-detected path
+            if ([string]::IsNullOrWhiteSpace($fill)) {
+                $fill = $script:AutoDetectedRbrPath
+            }
+            if (-not [string]::IsNullOrWhiteSpace($fill)) {
+                $txtModRoot.Text = $fill
+            }
+        }
         Update-ModStatus -GameRoot $txtModRoot.Text.Trim()
     }
 })
