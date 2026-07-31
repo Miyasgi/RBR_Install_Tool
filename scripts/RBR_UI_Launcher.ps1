@@ -41,10 +41,11 @@ $script:AppVersion = 'v2.1.0'
 $jsGameDir    = Join-Path $projectRoot 'JSGAME'
 $jsgmeExeName = 'JSGME MOD MANAGER.exe'
 # Fill in the Baidu Netdisk URL for the MODS pack before distributing:
-$script:ModsGiteeUrl     = 'https://gitee.com/Miyasgi/RBR_Install_Tool/releases/download/v2.2.1/RBR_MODS.zip'
+$script:ModsGiteeUrl     = 'https://gitee.com/Miyasgi/RBR_Install_Tool/releases/download/v2.4.1/RBR_MODS.zip'
 $script:ModsGithubUrl    = 'https://github.com/Miyasgi/RBR_Install_Tool/releases/download/v2.2.1/RBR_MODS.zip'
 $script:ModsGithubSha256 = 'f83e3ac0da86cb8218a43e27563cac48422b412c6c0d551e9c38f707e4a64927'
 $script:ModsBaiduUrl     = 'https://pan.baidu.com/s/1ZiGbMfBat1Ok0I6nAU8Jxg?pwd=fxme'
+$script:I18nGiteeUrl     = 'https://gitee.com/Miyasgi/RBR_Install_Tool/releases/download/v2.4.1/RBRi18n-v1.3.3.zip'
 
 $script:AppIcon = $null
 $script:LangCode = 'zh'
@@ -172,7 +173,7 @@ $script:Strings = @{
         'mod.install.warn.nomods'= '⚠ JSGME 已部署，但 MODS 文件夹为空——请先完成第一步导入 MOD 包'
         'i18n.step.title'        = '★ 汉化包（RBRi18n）：游戏安装完成后可一键安装'
         'i18n.btn.install'       = '安装内置汉化包'
-        'i18n.btn.update'        = 'GitHub 最新版 ↗'
+        'i18n.btn.update'        = '在线更新 ↗'
         'i18n.status.fetching'   = '正在查询最新版本...'
         'i18n.status.dl'         = '正在下载 {0}...'
         'i18n.status.extract'    = '正在解压到游戏目录...'
@@ -310,7 +311,7 @@ $script:Strings = @{
         'mod.install.warn.nomods'= '⚠ JSGME deployed, but MODS folder is empty — complete Step 1 first'
         'i18n.step.title'        = '★ Chinese Localization (RBRi18n): one-click install after game setup'
         'i18n.btn.install'       = 'Install Bundled Localization'
-        'i18n.btn.update'        = 'GitHub Latest ↗'
+        'i18n.btn.update'        = 'Update Online ↗'
         'i18n.status.fetching'   = 'Checking for latest version...'
         'i18n.status.dl'         = 'Downloading {0}...'
         'i18n.status.extract'    = 'Extracting to game folder...'
@@ -1394,7 +1395,7 @@ $btnI18n.Add_Click({
     }
 })
 
-# 从 GitHub 下载最新版
+# 在线更新汉化包：优先 Gitee（国内），失败再试 GitHub API
 $btnI18nUpdate.Add_Click({
     $gameRoot = $txtDownload.Text.Trim()
     if ([string]::IsNullOrWhiteSpace($gameRoot)) {
@@ -1407,15 +1408,39 @@ $btnI18nUpdate.Add_Click({
     $lblI18nStatus.Text      = (T 'i18n.status.fetching')
     [System.Windows.Forms.Application]::DoEvents()
     try {
-        $apiUrl  = 'https://api.github.com/repos/geekerlw/RBRi18n/releases/latest'
-        $release = Invoke-RestMethod -Uri $apiUrl -UseBasicParsing -ErrorAction Stop
-        $asset   = @($release.assets) | Where-Object { $_.name -like '*.zip' } | Select-Object -First 1
-        if (-not $asset) { throw (T 'i18n.err.noasset') }
+        $tmpZip   = Join-Path $env:TEMP 'RBRi18n_tmp.zip'
+        $fileName = ''
 
-        $tmpZip = Join-Path $env:TEMP 'RBRi18n_tmp.zip'
-        $lblI18nStatus.Text = (T 'i18n.status.dl' $asset.name)
-        [System.Windows.Forms.Application]::DoEvents()
-        Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $tmpZip -UseBasicParsing -ErrorAction Stop
+        # Try Gitee direct link first (no VPN needed for Chinese users)
+        $usedGitee = $false
+        if (-not [string]::IsNullOrWhiteSpace($script:I18nGiteeUrl)) {
+            try {
+                $fileName = [System.IO.Path]::GetFileName(([uri]$script:I18nGiteeUrl).AbsolutePath)
+                $lblI18nStatus.Text = (T 'i18n.status.dl' $fileName)
+                [System.Windows.Forms.Application]::DoEvents()
+                $wc = New-Object System.Net.WebClient
+                $wc.Headers.Add('User-Agent', 'Mozilla/5.0')
+                $wc.DownloadFile($script:I18nGiteeUrl, $tmpZip)
+                $usedGitee = $true
+            } catch {
+                $usedGitee = $false
+                try { Remove-Item $tmpZip -Force -ErrorAction SilentlyContinue } catch {}
+            }
+        }
+
+        # Fallback: GitHub API (for users with VPN or outside China)
+        if (-not $usedGitee) {
+            $lblI18nStatus.Text = (T 'i18n.status.fetching')
+            [System.Windows.Forms.Application]::DoEvents()
+            $apiUrl  = 'https://api.github.com/repos/geekerlw/RBRi18n/releases/latest'
+            $release = Invoke-RestMethod -Uri $apiUrl -UseBasicParsing -ErrorAction Stop
+            $asset   = @($release.assets) | Where-Object { $_.name -like '*.zip' } | Select-Object -First 1
+            if (-not $asset) { throw (T 'i18n.err.noasset') }
+            $fileName = $asset.name
+            $lblI18nStatus.Text = (T 'i18n.status.dl' $fileName)
+            [System.Windows.Forms.Application]::DoEvents()
+            Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $tmpZip -UseBasicParsing -ErrorAction Stop
+        }
 
         $lblI18nStatus.Text = (T 'i18n.status.extract')
         [System.Windows.Forms.Application]::DoEvents()
@@ -1423,7 +1448,7 @@ $btnI18nUpdate.Add_Click({
         Remove-Item $tmpZip -Force -ErrorAction SilentlyContinue
 
         $lblI18nStatus.ForeColor = [System.Drawing.Color]::DarkGreen
-        $lblI18nStatus.Text      = (T 'i18n.status.done' $asset.name)
+        $lblI18nStatus.Text      = (T 'i18n.status.done' $fileName)
     } catch {
         $lblI18nStatus.ForeColor = [System.Drawing.Color]::DarkRed
         $lblI18nStatus.Text      = (T 'i18n.err.fail' "$_")
